@@ -17,7 +17,7 @@
   pytest (backend; LLM/search mocked)
 
 .PARAMETER Frontend
-  pnpm install --frozen-lockfile && pnpm build in frontend/
+  pnpm install --frozen-lockfile && pnpm test && pnpm build in frontend/
 
 .PARAMETER Scan
   scan-uncommitted-secrets on changed files (uses ~/.agents skill if present)
@@ -100,11 +100,13 @@ try {
         if (-not (Test-CommandAvailable 'pnpm')) {
             throw "pnpm not found on PATH. Install pnpm (Node 24+), then re-run."
         }
-        Invoke-ValidateStep -Name 'frontend build' -Action {
+        Invoke-ValidateStep -Name 'frontend test + build' -Action {
             Push-Location (Join-Path $RepoRoot 'frontend')
             try {
                 pnpm install --frozen-lockfile
                 if ($LASTEXITCODE -ne 0) { throw "pnpm install failed ($LASTEXITCODE)" }
+                pnpm test
+                if ($LASTEXITCODE -ne 0) { throw "pnpm test failed ($LASTEXITCODE)" }
                 pnpm build
                 if ($LASTEXITCODE -ne 0) { throw "pnpm build failed ($LASTEXITCODE)" }
             }
