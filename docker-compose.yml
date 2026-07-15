@@ -1,0 +1,43 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./app:/app/app:ro
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  frontend:
+    build:
+      context: frontend
+      dockerfile: Dockerfile
+      target: dev
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_BACKEND_URL: http://backend:8000
+    volumes:
+      - ./frontend/src:/app/src:ro
+      - ./frontend/index.html:/app/index.html:ro
+      - ./frontend/vite.config.js:/app/vite.config.js:ro
+    depends_on:
+      - backend
+
+  # Prod-like local preview: serves the built `frontend/dist` static bundle
+  # (the same artifact deployed to Cloudflare Pages) via nginx instead of the
+  # Vite dev server. Opt in with `docker compose --profile prod up frontend-prod`.
+  frontend-prod:
+    build:
+      context: frontend
+      dockerfile: Dockerfile
+      target: prod
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    profiles:
+      - prod
