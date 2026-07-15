@@ -3,18 +3,107 @@
 // backend (default `http://localhost:8000`) by Vite's dev server (see
 // vite.config.js) and by the production reverse proxy/deploy setup.
 
+/**
+ * Format FastAPI / generic error bodies for display.
+ * FastAPI 422 responses use `detail` as an array of objects.
+ * @param {unknown} detail
+ * @returns {string}
+ */
+function formatErrorDetail(detail) {
+  if (detail === null || detail === undefined) return ''
+  if (typeof detail === 'string') return detail
+  if (Array.isArray(detail)) {
+    return detail
+      .map((entry) => {
+        if (typeof entry === 'string') return entry
+        if (entry && typeof entry === 'object') {
+          const loc = Array.isArray(entry.loc)
+            ? entry.loc.filter((part) => part !== 'body').join('.')
+            : ''
+          const msg = entry.msg ?? JSON.stringify(entry)
+          return loc ? `${loc}: ${msg}` : msg
+        }
+        return String(entry)
+      })
+      .join('; ')
+  }
+  if (typeof detail === 'object') {
+    return JSON.stringify(detail)
+  }
+  return String(detail)
+}
+
 async function parseJsonOrThrow(response) {
   if (!response.ok) {
     let detail = response.statusText
     try {
       const body = await response.json()
-      detail = body.detail ?? body.message ?? JSON.stringify(body)
+      detail = formatErrorDetail(body.detail ?? body.message ?? body)
     } catch {
       // response had no JSON body; fall back to statusText
     }
     throw new Error(`Request failed (${response.status}): ${detail}`)
   }
   return response.json()
+}
+
+/**
+ * Map a locked CandidateItem from identify into the research/listing request shape.
+ * Identify uses `name`; research/listing schemas use `item_name`.
+ * @param {Record<string, unknown>} item
+ * @returns {{
+ *   item_name: string,
+ *   brand: string | null,
+ *   model: string | null,
+ *   attributes: Record<string, string>,
+ *   condition: string | null,
+ * }}
+ */
+function itemToRequestFields(item) {
+  const name = item?.item_name ?? item?.name ?? item?.title ?? item?.label
+  if (!name || typeof name !== 'string') {
+    throw new Error('Locked item is missing a name.')
+  }
+  return {
+    item_name: name,
+    brand: typeof item.brand === 'string' ? item.brand : null,
+    model: typeof item.model === 'string' ? item.model : null,
+    attributes:
+      item.attributes && typeof item.attributes === 'object' && !Array.isArray(item.attributes)
+        ? item.attributes
+        : {},
+    condition: typeof item.condition === 'string' ? item.condition : null,
+  }
+}
+
+/**
+ * Build a short research summary string for listing generation.
+ * @param {Record<string, unknown> | null | undefined} research
+ * @returns {string | null}
+ */
+function researchSummary(research) {
+  if (!research || typeof research !== 'object') return null
+  const parts = []
+  if (research.price_range) {
+    const range = research.price_range
+    if (typeof range === 'string') {
+      parts.push(`Price: ${range}`)
+    } else if (typeof range === 'object') {
+      const summary = range.summary
+      if (summary) {
+        parts.push(`Price: ${summary}`)
+      } else if (range.low != null || range.high != null) {
+        parts.push(`Price: ${range.low ?? '?'}–${range.high ?? '?'}`)
+      }
+    }
+  }
+  if (typeof research.demand === 'string' && research.demand) {
+    parts.push(`Demand: ${research.demand}`)
+  }
+  if (typeof research.marketing_angle === 'string' && research.marketing_angle) {
+    parts.push(`Angle: ${research.marketing_angle}`)
+  }
+  return parts.length ? parts.join('. ') : null
 }
 
 /**
@@ -43,11 +132,20 @@ export async function checkHealth() {
 export async function identifyItem({ description, images = [], context }) {
   const formData = new FormData()
   formData.append('description', description ?? '')
-  if (context !== undefined) {
-    formData.append(
-      'context',
-      typeof context === 'string' ? context : JSON.stringify(context),
-    )
+  if (context !== undefined && context !== null) {
+    // Backend accepts known_attributes + conversation as JSON form fields.
+    if (typeof context === 'object' && !Array.isArray(context)) {
+      formData.append(
+        'known_attributes',
+        JSON.stringify(context.known_attributes ?? {}),
+      )
+      formData.append(
+        'conversation',
+        JSON.stringify(context.conversation ?? []),
+      )
+    } else if (typeof context === 'string') {
+      formData.append('known_attributes', context)
+    }
   }
   for (const image of images) {
     formData.append('images', image)
@@ -63,7 +161,7 @@ export async function identifyItem({ description, images = [], context }) {
 /**
  * Request a market research report for a locked item.
  *
- * @param {{ item: unknown }} params
+ * @param {{ item: Record<string, unknown> }} params
  * @returns {Promise<{
  *   price_range: unknown,
  *   demand: unknown,
@@ -75,7 +173,7 @@ export async function requestResearch({ item }) {
   const response = await fetch('/api/research', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ item }),
+    body: JSON.stringify(itemToRequestFields(item)),
   })
   return parseJsonOrThrow(response)
 }
@@ -83,9 +181,9 @@ export async function requestResearch({ item }) {
 /**
  * Request generated marketplace listing content for the approved item.
  *
- * @param {{ item: unknown, research: unknown }} params
+ * @param {{ item: Record<string, unknown>, research: Record<string, unknown> }} params
  * @returns {Promise<{
- *   facebook: { title: string, description: string },
+ *   facebook_marketplace: { title: string, description: string },
  *   offerup: { title: string, description: string },
  * }>}
  */
@@ -93,7 +191,11 @@ export async function generateListing({ item, research }) {
   const response = await fetch('/api/listing', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ item, research }),
+    body: JSON.stringify({
+      ...itemToRequestFields(item),
+      research_approved: true,
+      research_summary: researchSummary(research),
+    }),
   })
   return parseJsonOrThrow(response)
 }

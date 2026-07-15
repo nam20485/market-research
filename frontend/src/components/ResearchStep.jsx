@@ -6,10 +6,12 @@ function formatPriceRange(priceRange) {
   if (typeof priceRange === 'string') return priceRange
   if (Array.isArray(priceRange)) return priceRange.join(' – ')
   if (typeof priceRange === 'object') {
-    const { min, max, currency } = priceRange
-    const prefix = currency ?? '$'
-    if (min !== undefined && max !== undefined) {
-      return `${prefix}${min} – ${prefix}${max}`
+    if (priceRange.summary) return priceRange.summary
+    const low = priceRange.low ?? priceRange.min
+    const high = priceRange.high ?? priceRange.max
+    const currency = priceRange.currency ?? 'USD'
+    if (low !== undefined && high !== undefined) {
+      return `${currency} ${low} – ${high}`
     }
   }
   return JSON.stringify(priceRange)

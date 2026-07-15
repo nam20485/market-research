@@ -90,8 +90,11 @@ export default function ListingStep({ item, research, onBack, onStartOver }) {
       {!isLoading && listing && (
         <div className="flex flex-col gap-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            {listing.facebook && (
-              <ListingCard marketplace="Facebook Marketplace" listing={listing.facebook} />
+            {listing.facebook_marketplace && (
+              <ListingCard
+                marketplace="Facebook Marketplace"
+                listing={listing.facebook_marketplace}
+              />
             )}
             {listing.offerup && (
               <ListingCard marketplace="OfferUp" listing={listing.offerup} />
