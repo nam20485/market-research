@@ -37,7 +37,7 @@ pwsh -NoProfile -File ./scripts/validate.ps1 -All
 ```
 
 Switches: `-Lint` (ruff), `-Typecheck` (basedpyright), `-Test` (pytest),
-`-Frontend` (`pnpm build`), `-Scan` (uncommitted-secret scan when the skill is
+`-Frontend` (`pnpm test` + `pnpm build`), `-Scan` (uncommitted-secret scan when the skill is
 installed). With no switches, `-All` is the default.
 
 Equivalent manual commands:
@@ -46,7 +46,7 @@ Equivalent manual commands:
 uv run pytest         # backend tests (LLM/search mocked, no real network calls)
 uv run ruff check .   # lint
 uv run basedpyright   # type check
-cd frontend && pnpm build  # frontend build check (no dedicated test runner yet)
+cd frontend && pnpm test && pnpm build  # API client tests + production build
 ```
 
 These same checks run in `.github/workflows/ci.yml` on every push/PR to any branch.
@@ -77,8 +77,11 @@ Git history uses imperative, descriptive commit messages (e.g., "Add initial imp
 ## Learned User Preferences
 
 - Prefer dark mode as the default frontend theme, with a persisted light/dark toggle.
+- Prefer frontend work to reach ≥95% test coverage before treating it as done.
 
 ## Learned Workspace Facts
 
 - Cloudflare Pages + GitHub Actions deploy scaffolding was modeled on `intel-agency` / `intel-agency-com-v2`; keep the Pages `projectName` identical in Terraform and `cloudflare_deploy.yml`.
+- Backend production hosting is deferred/undecided; `publish-backend-image.yml` only builds and pushes to GHCR (`ghcr.io/<owner>/<repo>-backend`). Frontend deploys to Cloudflare Pages.
 - `.env` is loaded via pydantic-settings without shell-style `$VAR` interpolation; LiteLLM provider keys such as `ZAI_API_KEY` (for `zai/` models) must come from the process/container environment, not from expanding variables inside `.env`.
+- OpenAI-compatible providers use the `openai/<model>` LiteLLM prefix with `LLM_API_BASE` / `LLM_API_KEY` (and optional `VISION_*`; blank vision base/key inherit from LLM). Z.AI coding plan (`zai/`) is text-only — point vision at a separate provider.

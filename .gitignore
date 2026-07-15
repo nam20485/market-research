@@ -8,10 +8,14 @@ dist/
 node_modules/
 .pytest_cache/
 .ruff_cache/
+.coverage
+htmlcov/
+coverage.json
 
 # Frontend (built separately by the frontend worker)
 frontend/node_modules/
 frontend/dist/
+frontend/coverage/
 
 # Terraform (deploy/tf) — never commit state or vars containing secrets
 # (.terraform.lock.hcl IS committed; it pins provider versions, no secrets)

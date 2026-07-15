@@ -111,8 +111,8 @@ See [frontend/README.md](frontend/README.md) for the Vite + React wizard UI
 ## CI / Deployment
 
 - `.github/workflows/ci.yml` — runs on every push/PR to any branch. Lints and type-checks
-  and tests the backend (`ruff check`, `basedpyright`, `pytest`) and builds the frontend
-  (`pnpm install && pnpm build`). Safe and non-deploying — no secrets used, nothing
+  and tests the backend (`ruff check`, `basedpyright`, `pytest`) and the frontend
+  (`pnpm test && pnpm build`). Safe and non-deploying — no secrets used, nothing
   published.
 - **All deploy workflows below are `workflow_dispatch` (manual) only. None of them have
   ever been run — nothing has been deployed anywhere.** Per the project plan: *DO NOT
@@ -188,7 +188,7 @@ pwsh -NoProfile -File ./scripts/validate.ps1 -All
 ```
 
 Or individually: `uv run pytest`, `uv run ruff check .`, `uv run basedpyright`,
-and `cd frontend && pnpm build`.
+and `cd frontend && pnpm test && pnpm build`.
 
 ## Development Status
 
