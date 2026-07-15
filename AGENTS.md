@@ -30,6 +30,18 @@ docker compose up --build                        # run both services in containe
 
 ## Testing & Quality Gates
 
+Preferred single entry point (mirrors CI):
+
+```bash
+pwsh -NoProfile -File ./scripts/validate.ps1 -All
+```
+
+Switches: `-Lint` (ruff), `-Typecheck` (basedpyright), `-Test` (pytest),
+`-Frontend` (`pnpm build`), `-Scan` (uncommitted-secret scan when the skill is
+installed). With no switches, `-All` is the default.
+
+Equivalent manual commands:
+
 ```bash
 uv run pytest         # backend tests (LLM/search mocked, no real network calls)
 uv run ruff check .   # lint
@@ -61,3 +73,12 @@ inference features. Cloudflare/GHCR deploy secrets live in GitHub Actions repo s
 ## Commit & Pull Request Guidelines
 
 Git history uses imperative, descriptive commit messages (e.g., "Add initial implementation of market research app with Python 3.12 support..."). Scope changes in the subject; add detail in the body when needed. No PR template exists yet.
+
+## Learned User Preferences
+
+- Prefer dark mode as the default frontend theme, with a persisted light/dark toggle.
+
+## Learned Workspace Facts
+
+- Cloudflare Pages + GitHub Actions deploy scaffolding was modeled on `intel-agency` / `intel-agency-com-v2`; keep the Pages `projectName` identical in Terraform and `cloudflare_deploy.yml`.
+- `.env` is loaded via pydantic-settings without shell-style `$VAR` interpolation; LiteLLM provider keys such as `ZAI_API_KEY` (for `zai/` models) must come from the process/container environment, not from expanding variables inside `.env`.

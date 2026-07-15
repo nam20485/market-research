@@ -132,6 +132,46 @@ See [frontend/README.md](frontend/README.md) for the Vite + React wizard UI
   `github_username`, `github_repo_name` yourself (e.g. via an untracked `.tfvars` file or
   `TF_VAR_*` env vars) when/if you actually run `terraform plan`/`apply`.
 
+## Model & provider configuration
+
+Inference is configured per role in `.env`: a **chat** model (market research +
+listing) and a **vision** model (item identification). Model IDs are
+LiteLLM-style provider-prefixed; for any OpenAI-compatible endpoint use
+`openai/<model>` together with `LLM_API_BASE`.
+
+- `LLM_MODEL` / `LLM_API_BASE` / `LLM_API_KEY` — chat.
+- `VISION_MODEL` / `VISION_API_BASE` / `VISION_API_KEY` — vision. The base and
+  key inherit the chat values when left blank, so one provider can serve both.
+- When a key is blank, LiteLLM falls back to the provider's own environment
+  variable (`OPENAI_API_KEY`, `ZAI_API_KEY`, ...); `OPENAI_API_KEY` also acts as
+  a generic api_key fallback for both roles.
+
+Example — ClinePass with `qwen3.7-plus` (multimodal, so it serves both roles).
+Cline requires `modelType/model` (e.g. `cline-pass/...`); LiteLLM's `openai/`
+prefix is only for routing and is stripped before the request:
+
+```
+LLM_MODEL=openai/cline-pass/qwen3.7-plus
+LLM_API_BASE=https://api.cline.bot/api/v1
+LLM_API_KEY=<clinepass key>                    # or: export LLM_API_KEY=$CLINE_API_KEY
+VISION_MODEL=openai/cline-pass/qwen3.7-plus    # base/key inherited from LLM_*
+```
+
+Some coding-plan proxies accept a multimodal model but still reject image
+inputs. Confirm your endpoint actually passes images before relying on it:
+
+```bash
+uv run python scripts/check_vision.py             # uses a generated test image
+uv run python scripts/check_vision.py --image photo.jpg
+```
+
+When `LLM_API_BASE` / `VISION_API_BASE` is set, the app talks OpenAI-compatible
+HTTP directly (and unwraps envelopes like Cline's `{data, success}` wrapper).
+Without a custom base, requests go through LiteLLM's native providers.
+
+See `.env.example` for more recipes (e.g. the Z.AI GLM Coding Plan for chat plus
+a separate vision provider).
+
 ## API
 
 - `GET /healthz`
@@ -144,10 +184,11 @@ See [frontend/README.md](frontend/README.md) for the Vite + React wizard UI
 ## Quality Checks
 
 ```bash
-uv run pytest
-uv run ruff check .
-uv run basedpyright
+pwsh -NoProfile -File ./scripts/validate.ps1 -All
 ```
+
+Or individually: `uv run pytest`, `uv run ruff check .`, `uv run basedpyright`,
+and `cd frontend && pnpm build`.
 
 ## Development Status
 
