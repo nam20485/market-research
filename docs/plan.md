@@ -54,9 +54,9 @@ environment variables/`.env` for the api key and other configuration
 
 ### Deployment
 
-** DEFERRED UNTIL LATER PHASE - LOCAL DEVELOPMENT ONLY **
-
 - github actions for the deployment
 - cloudflare worker and DNS for the deployment
 - follow existing deployment pattern found in GH repo:
-    - `intel-agency/intel-agency-com-v2`
+    - `intel-agency/intel-agency-com-v2` (`/home/nam20485/src/github/intel-agency`)
+
+**DO NOT ACTUALLY DEPLOY YET- USER WILL MERGE TO RELEASE BRANCH MANUALLY WHEN READY TO DEPLOY**
