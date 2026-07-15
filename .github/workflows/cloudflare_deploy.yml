@@ -1,0 +1,46 @@
+name: Deploy Frontend to Cloudflare Pages
+
+# Manual only. This workflow has NOT been run — nothing has been deployed.
+# Trigger it yourself (Actions tab -> Deploy Frontend to Cloudflare Pages ->
+# Run workflow) once CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID secrets are
+# provisioned (see deploy/tf/) and you're ready to actually deploy.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        working-directory: frontend
+        run: pnpm build
+
+      - name: Publish to Cloudflare Pages
+        uses: cloudflare/pages-action@f0a1cd58cd66095dee69bfa18fa5efd1dde93bca # v1.5.0
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # Must match the `cloudflare_pages_project` name in deploy/tf/main.tf.
+          projectName: market-research
+          directory: frontend/dist
+          branch: ${{ github.ref_name }}
