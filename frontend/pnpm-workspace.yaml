@@ -1,0 +1,4 @@
+# Marks frontend/ as its own pnpm workspace root so installs don't walk up
+# to unrelated ancestor directories (e.g. a stray ~/pnpm-workspace.yaml).
+packages:
+  - .
