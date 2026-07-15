@@ -1,4 +1,10 @@
-Create a UI app that conducts used market price research and creates sale listing content for used items the user enters.
+# Plan
+
+## Description
+
+Create a UI app that conducts used market price and sales research and creates sale listing content for target online marketplaces for used items the user enters
+
+## Requirements and UI Flow
  
 Create content compatible with FB marketplace and Offerup market listings. 
 
@@ -10,9 +16,31 @@ Identify Item:
 - Repeat until you have a lock on the specific item
 
 - Gather Market Research
-- Create used market research report (used prices, demand, optimal marketing angle, etc.
+- Create used market research report (used prices, demand, optimal marketing angle), etc.
 
 - If user approves:
 
 Create market listing content (title, description body, etc.) in target market format
+for inference
+
+## Tech Stack
+
+- Python
+- uv package management
+
+### Frontend
+
+Recommend: easiest and simplest. Vite? 
+
+
+### Backend
+
+- litellm for inference using openai and other models
+- fast api for the api
+
+Python:
+
+- uv
+- fastapi
+- litellm 
 
