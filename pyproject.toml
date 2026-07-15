@@ -1,7 +1,7 @@
 [project]
 name = "market-research"
 version = "0.1.0"
-description = "Add your description here"
+description = "Used market price research and sale listing content for online marketplaces"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = []
