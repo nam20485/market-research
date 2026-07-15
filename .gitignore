@@ -5,3 +5,19 @@ build/
 dist/
 *.egg-info/
 .cursor/
+node_modules/
+.pytest_cache/
+.ruff_cache/
+
+# Frontend (built separately by the frontend worker)
+frontend/node_modules/
+frontend/dist/
+
+# Terraform (deploy/tf) — never commit state or vars containing secrets
+# (.terraform.lock.hcl IS committed; it pins provider versions, no secrets)
+deploy/tf/.terraform/
+deploy/tf/*.tfstate
+deploy/tf/*.tfstate.*
+deploy/tf/*.tfvars
+deploy/tf/*.tfvars.json
+deploy/tf/crash.log
