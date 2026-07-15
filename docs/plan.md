@@ -25,6 +25,10 @@ for inference
 
 ## Tech Stack
 
+Keep it simple and easy to implement and maintain.
+
+### Language and Package Management
+
 - Python
 - uv package management
 
@@ -36,11 +40,23 @@ Recommend: easiest and simplest. Vite?
 ### Backend
 
 - litellm for inference using openai and other models
-- fast api for the api
+- fastapi for the api
 
-Python:
 
-- uv
-- fastapi
-- litellm 
+### Configuration
 
+environment variables/`.env` for the api key and other configuration
+
+### Containerization
+
+- docker for containerization
+- docker-compose for the docker-compose file
+
+### Deployment
+
+** DEFERRED UNTIL LATER PHASE - LOCAL DEVELOPMENT ONLY **
+
+- github actions for the deployment
+- cloudflare worker and DNS for the deployment
+- follow existing deployment pattern found in GH repo:
+    - `intel-agency/intel-agency-com-v2`
