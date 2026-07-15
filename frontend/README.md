@@ -15,6 +15,13 @@ pnpm dev
 The dev server proxies `/api` and `/healthz` requests to
 `http://localhost:8000`, where the FastAPI backend runs (see `vite.config.js`).
 
+## Test
+
+```bash
+pnpm test              # Vitest unit + component + API client tests
+pnpm test:coverage     # same with coverage (thresholds: ≥95% lines/statements/functions)
+```
+
 ## Build
 
 ```bash

@@ -9,6 +9,23 @@ const backendTarget = process.env.VITE_BACKEND_URL || 'http://localhost:8000'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  test: {
+    environment: 'jsdom',
+    include: ['src/**/*.{test,spec}.{js,jsx}'],
+    setupFiles: ['./src/test/setup.js'],
+    coverage: {
+      provider: 'v8',
+      include: ['src/**/*.{js,jsx}'],
+      exclude: ['src/**/*.{test,spec}.{js,jsx}', 'src/test/**', 'src/index.css'],
+      reporter: ['text', 'text-summary'],
+      thresholds: {
+        lines: 95,
+        statements: 95,
+        functions: 95,
+        branches: 85,
+      },
+    },
+  },
   server: {
     proxy: {
       '/api': {
