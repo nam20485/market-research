@@ -1,0 +1,72 @@
+name: Deploy Backend to Google Cloud Run
+
+# Manual only. This workflow has NOT been run — nothing has been deployed.
+# Trigger it yourself (Actions tab -> Deploy Backend to Google Cloud Run ->
+# Run workflow) once the GCP_SA_KEY secret and GCP_PROJECT_ID Actions variable
+# are provisioned (Terraform in deploy/tf/ sets both) and you're ready to
+# actually deploy. Consistent with the repo's "DO NOT ACTUALLY DEPLOY YET" rule.
+#
+# Auth uses a Service Account key JSON (secrets.GCP_SA_KEY), NOT Workload
+# Identity Federation, so no id-token permission is required.
+#
+# Required repo configuration (both set by `terraform apply` in deploy/tf/):
+#   - Secret  GCP_SA_KEY:      Service Account key JSON with permission to push
+#                              to Artifact Registry and deploy to Cloud Run.
+#   - Variable GCP_PROJECT_ID: Google Cloud project ID (an Actions *variable*,
+#                              not a secret).
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Extra tag to apply in addition to the git SHA (e.g. a version like v0.1.0). Optional."
+        required: false
+        default: ""
+
+env:
+  GCP_REGION: us-central1
+  AR_HOST: us-central1-docker.pkg.dev
+  SERVICE_NAME: market-research-backend
+  # Artifact Registry repository name (created by deploy/tf/).
+  AR_REPOSITORY: market-research
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.AR_HOST }} --quiet
+
+      - name: Build and push image (SHA-tagged, never latest)
+        env:
+          IMAGE: ${{ env.AR_HOST }}/${{ vars.GCP_PROJECT_ID }}/${{ env.AR_REPOSITORY }}/${{ env.SERVICE_NAME }}:${{ github.sha }}
+        run: |
+          docker build -f Dockerfile -t "$IMAGE" .
+          docker push "$IMAGE"
+          # Optional additional tag mirrors the backend GHCR workflow's `tag` input.
+          if [ -n "${{ inputs.tag }}" ]; then
+            EXTRA="${{ env.AR_HOST }}/${{ vars.GCP_PROJECT_ID }}/${{ env.AR_REPOSITORY }}/${{ env.SERVICE_NAME }}:${{ inputs.tag }}"
+            docker tag "$IMAGE" "$EXTRA"
+            docker push "$EXTRA"
+          fi
+
+      - name: Deploy to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          service: ${{ env.SERVICE_NAME }}
+          region: ${{ env.GCP_REGION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          image: ${{ env.AR_HOST }}/${{ vars.GCP_PROJECT_ID }}/${{ env.AR_REPOSITORY }}/${{ env.SERVICE_NAME }}:${{ github.sha }}

@@ -1,10 +1,14 @@
 name: Publish Backend Image
 
+# SUPERSEDED / DORMANT. Kept for reference only — do not delete.
+# Backend deployment now targets Google Cloud Run, which pulls its image from
+# Google Artifact Registry (see google-cloudrun-deploy.yml), NOT from GHCR. This
+# GHCR publish workflow is therefore redundant and is retained only as a fallback
+# / historical option.
+#
 # Manual only. This workflow has NOT been run — no image has been published.
 # Builds the root Dockerfile and pushes it to GHCR when a human explicitly
-# triggers it (Actions tab -> Publish Backend Image -> Run workflow). The
-# actual hosting target for the resulting container image is deferred/
-# undecided; this workflow only builds and publishes it.
+# triggers it (Actions tab -> Publish Backend Image -> Run workflow).
 on:
   workflow_dispatch:
     inputs:

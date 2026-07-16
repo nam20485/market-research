@@ -33,6 +33,12 @@ jobs:
 
       - name: Build
         working-directory: frontend
+        # VITE_BACKEND_URL bakes the deployed backend origin (e.g. the Cloud Run
+        # URL) into the static bundle so the Pages site calls the backend
+        # directly. Set the VITE_BACKEND_URL Actions variable (Terraform can set
+        # it). When unset it is empty and the bundle uses relative paths.
+        env:
+          VITE_BACKEND_URL: ${{ vars.VITE_BACKEND_URL }}
         run: pnpm build
 
       - name: Publish to Cloudflare Pages
