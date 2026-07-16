@@ -1,5 +1,6 @@
 """Item identification service: vision attribute extraction + stateless refinement."""
 
+from app.logging_config import get_logger
 from app.prompts.identify import build_identify_prompt
 from app.schemas.identify import CandidateItem, ConversationTurn, IdentifyRequest, IdentifyResponse
 from app.services.json_utils import parse_json_object
@@ -7,6 +8,7 @@ from app.services.llm import LLMService
 from app.services.search import SearchProvider
 
 LOCK_CONFIDENCE_THRESHOLD = 0.8
+logger = get_logger(__name__)
 
 
 class IdentificationService:
@@ -21,6 +23,12 @@ class IdentificationService:
         request: IdentifyRequest,
         image_data_urls: list[str] | None = None,
     ) -> IdentifyResponse:
+        image_count = len(image_data_urls or [])
+        logger.info(
+            "identify: calling vision (images=%d known_attrs=%d)",
+            image_count,
+            len(request.known_attributes),
+        )
         prompt = build_identify_prompt(
             description=request.description,
             known_attributes=request.known_attributes,
@@ -39,6 +47,7 @@ class IdentificationService:
             name_or_model = top_candidate.model or top_candidate.name
             query = " ".join(part for part in (top_candidate.brand, name_or_model) if part)
             if query:
+                logger.info("identify: enriching top candidate via search query=%r", query)
                 results = await self._search.search(query, max_results=3)
                 if results:
                     top_candidate.attributes.setdefault(
@@ -50,6 +59,12 @@ class IdentificationService:
             ConversationTurn(role="user", content=request.description),
         ]
 
+        logger.info(
+            "identify: parsed candidates=%d locked=%s top=%r",
+            len(candidates),
+            locked,
+            top_candidate.name if top_candidate else None,
+        )
         return IdentifyResponse(
             candidates=candidates,
             locked=locked,

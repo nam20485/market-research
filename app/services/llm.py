@@ -1,11 +1,15 @@
 """Thin async wrapper around LiteLLM / OpenAI-compatible HTTP for chat and vision."""
 
+import time
 from typing import Any
 
 import httpx
 import litellm
 
 from app.config import Settings, get_settings
+from app.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 # LiteLLM routing prefix for generic OpenAI-compatible endpoints. When we call a
 # custom api_base ourselves we strip this so the upstream sees its own model id
@@ -73,24 +77,44 @@ class LLMService:
         **kwargs: Any,
     ) -> str:
         api_base = call_kwargs.get("api_base")
-        if api_base:
-            return await _openai_compatible_completion(
-                api_base=api_base,
-                api_key=call_kwargs.get("api_key", ""),
-                model=_strip_openai_routing_prefix(model),
-                messages=messages,
-                temperature=temperature,
-                **kwargs,
+        started = time.perf_counter()
+        via = "openai-compatible" if api_base else "litellm"
+        logger.info("llm %s start: model=%s messages=%d", via, model, len(messages))
+        try:
+            if api_base:
+                text = await _openai_compatible_completion(
+                    api_base=api_base,
+                    api_key=call_kwargs.get("api_key", ""),
+                    model=_strip_openai_routing_prefix(model),
+                    messages=messages,
+                    temperature=temperature,
+                    **kwargs,
+                )
+            else:
+                response = await litellm.acompletion(
+                    model=model,
+                    messages=messages,
+                    temperature=temperature,
+                    **call_kwargs,
+                    **kwargs,
+                )
+                text = _extract_litellm_text(response)
+        except Exception:
+            logger.exception(
+                "llm %s failed after %.2fs: model=%s",
+                via,
+                time.perf_counter() - started,
+                model,
             )
-
-        response = await litellm.acompletion(
-            model=model,
-            messages=messages,
-            temperature=temperature,
-            **call_kwargs,
-            **kwargs,
+            raise
+        logger.info(
+            "llm %s complete in %.2fs: model=%s response_len=%d",
+            via,
+            time.perf_counter() - started,
+            model,
+            len(text),
         )
-        return _extract_litellm_text(response)
+        return text
 
 
 def _strip_openai_routing_prefix(model: str) -> str:

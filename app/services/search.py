@@ -7,6 +7,9 @@ from pydantic import BaseModel
 from tavily import AsyncTavilyClient
 
 from app.config import Settings, get_settings
+from app.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class SearchResult(BaseModel):
@@ -34,8 +37,10 @@ class TavilySearchProvider(SearchProvider):
         self._client = AsyncTavilyClient(api_key=self._settings.tavily_api_key)
 
     async def search(self, query: str, *, max_results: int = 5) -> list[SearchResult]:
+        logger.info("tavily search: query_len=%d max_results=%d", len(query), max_results)
         response = await self._client.search(query=query, max_results=max_results)
         results = response.get("results", []) if isinstance(response, dict) else []
+        logger.info("tavily search: returned %d results", len(results))
         return [
             SearchResult(
                 title=item.get("title", ""),

@@ -2,11 +2,14 @@
 
 from collections.abc import Iterable
 
+from app.logging_config import get_logger
 from app.prompts.research import build_research_prompt
 from app.schemas.research import PriceRange, ResearchRequest, ResearchResponse, SourceLink
 from app.services.json_utils import parse_json_object
 from app.services.llm import LLMService
 from app.services.search import SearchProvider, SearchResult
+
+logger = get_logger(__name__)
 
 MAX_RESULTS_PER_QUERY = 5
 # Tavily rejects queries longer than this; leave headroom for query suffixes
@@ -35,7 +38,9 @@ class ResearchService:
 
     async def research(self, request: ResearchRequest) -> ResearchResponse:
         item_label = self._item_label(request)
+        logger.info("research: gathering comps for %r", item_label)
         results = await self._gather_results(item_label)
+        logger.info("research: got %d search hits; synthesizing report", len(results))
 
         prompt = build_research_prompt(
             item_description=item_label,
@@ -48,6 +53,11 @@ class ResearchService:
         price_range = PriceRange(**parsed.get("price_range", {}))
         sources = _dedupe_sources(SourceLink(title=r.title, url=r.url) for r in results if r.url)
 
+        logger.info(
+            "research: report ready (sources=%d demand_len=%d)",
+            len(sources),
+            len(str(parsed.get("demand", ""))),
+        )
         return ResearchResponse(
             price_range=price_range,
             demand=parsed.get("demand", ""),
@@ -62,6 +72,7 @@ class ResearchService:
         ]
         results: list[SearchResult] = []
         for query in queries:
+            logger.info("research: search query=%r", query)
             results.extend(await self._search.search(query, max_results=MAX_RESULTS_PER_QUERY))
         return results
 

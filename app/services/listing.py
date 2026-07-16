@@ -1,9 +1,12 @@
 """Listing generation service: formats copy-paste-ready marketplace listing content."""
 
+from app.logging_config import get_logger
 from app.prompts.listing import build_listing_prompt
 from app.schemas.listing import ListingRequest, ListingResponse, MarketplaceListing
 from app.services.json_utils import parse_json_object
 from app.services.llm import LLMService
+
+logger = get_logger(__name__)
 
 
 class ResearchNotApprovedError(Exception):
@@ -23,6 +26,7 @@ class ListingService:
             )
 
         item_label = self._item_label(request)
+        logger.info("listing: generating marketplace copy for %r", item_label)
         prompt = build_listing_prompt(
             item_description=item_label,
             condition=request.condition,
@@ -31,6 +35,7 @@ class ListingService:
         )
         raw = await self._llm.chat([{"role": "user", "content": prompt}])
         parsed = parse_json_object(raw)
+        logger.info("listing: LLM response parsed")
 
         return ListingResponse(
             facebook_marketplace=MarketplaceListing(**parsed.get("facebook_marketplace", {})),
