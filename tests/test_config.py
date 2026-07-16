@@ -15,6 +15,17 @@ _APP_ENV_VARS = (
     "SEARCH_PROVIDER",
     "TAVILY_API_KEY",
     "CORS_ORIGINS",
+    "COMPS_PROVIDER",
+    "COMPS_ENABLED",
+    "COMPS_MAX_RESULTS",
+    "SERPAPI_API_KEY",
+    "CACHE_ENABLED",
+    "CACHE_BACKEND",
+    "CACHE_DB_PATH",
+    "CACHE_TTL_COMPS_SECONDS",
+    "CACHE_TTL_IDENTITY_SECONDS",
+    "DEFAULT_HAGGLE_PCT",
+    "DEFAULT_FLOOR_PCT",
 )
 
 
@@ -33,6 +44,42 @@ def test_settings_defaults() -> None:
     assert settings.llm_model == "gpt-4o-mini"
     assert settings.vision_model == "gpt-4o-mini"
     assert settings.search_provider == "tavily"
+
+
+@pytest.mark.usefixtures("clean_env")
+def test_settings_comps_cache_pricing_defaults() -> None:
+    settings = Settings()
+    assert settings.comps_provider == "serpapi"
+    assert settings.comps_enabled is True
+    assert settings.comps_max_results == 8
+    assert settings.serpapi_api_key == ""
+    assert settings.cache_enabled is True
+    assert settings.cache_backend == "sqlite"
+    assert settings.cache_db_path == ".cache/market_research.sqlite3"
+    assert settings.cache_ttl_comps_seconds == 604800
+    assert settings.cache_ttl_identity_seconds == 2592000
+    assert settings.default_haggle_pct == 0.15
+    assert settings.default_floor_pct == 0.10
+
+
+def test_settings_reads_comps_cache_pricing_env(clean_env: pytest.MonkeyPatch) -> None:
+    clean_env.setenv("SERPAPI_API_KEY", "serp-test")
+    clean_env.setenv("COMPS_ENABLED", "false")
+    clean_env.setenv("COMPS_MAX_RESULTS", "3")
+    clean_env.setenv("CACHE_ENABLED", "false")
+    clean_env.setenv("CACHE_TTL_COMPS_SECONDS", "60")
+    clean_env.setenv("DEFAULT_HAGGLE_PCT", "0.2")
+    clean_env.setenv("DEFAULT_FLOOR_PCT", "0.05")
+
+    settings = Settings()
+
+    assert settings.serpapi_api_key == "serp-test"
+    assert settings.comps_enabled is False
+    assert settings.comps_max_results == 3
+    assert settings.cache_enabled is False
+    assert settings.cache_ttl_comps_seconds == 60
+    assert settings.default_haggle_pct == 0.2
+    assert settings.default_floor_pct == 0.05
 
 
 def test_settings_reads_env(clean_env: pytest.MonkeyPatch) -> None:

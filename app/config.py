@@ -47,6 +47,23 @@ class Settings(BaseSettings):
     tavily_api_key: str = ""
     cors_origins: str = "http://localhost:5173"
 
+    # eBay sold-comps lookup (used for FMV pricing research).
+    comps_provider: str = "serpapi"
+    comps_enabled: bool = True
+    comps_max_results: int = 8
+    serpapi_api_key: str = ""
+
+    # Local cache for provider responses (sold comps, identity lookups).
+    cache_enabled: bool = True
+    cache_backend: str = "sqlite"
+    cache_db_path: str = ".cache/market_research.sqlite3"
+    cache_ttl_comps_seconds: int = 604800
+    cache_ttl_identity_seconds: int = 2592000
+
+    # Pricing defaults: haggle room above FMV and firm-bottom floor below it.
+    default_haggle_pct: float = 0.15
+    default_floor_pct: float = 0.10
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
