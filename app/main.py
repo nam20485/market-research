@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import identify, listing, research
+from app.api import identify, listing, posting, research
 from app.config import get_settings
 from app.logging_config import configure_logging, get_logger
 
@@ -41,6 +41,7 @@ def create_app() -> FastAPI:
     app.include_router(identify.router, prefix="/api")
     app.include_router(research.router, prefix="/api")
     app.include_router(listing.router, prefix="/api")
+    app.include_router(posting.router, prefix="/api")
 
     logger.info(
         "App created (cors_origins=%s)",

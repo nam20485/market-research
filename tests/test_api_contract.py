@@ -60,9 +60,13 @@ def test_openapi_documents_all_public_routes() -> None:
     assert "/api/identify" in paths
     assert "/api/research" in paths
     assert "/api/listing" in paths
+    assert "/api/post/capabilities" in paths
+    assert "/api/post/fill" in paths
     assert "post" in paths["/api/identify"]
     assert "post" in paths["/api/research"]
     assert "post" in paths["/api/listing"]
+    assert "get" in paths["/api/post/capabilities"]
+    assert "post" in paths["/api/post/fill"]
 
 
 def test_openapi_registers_core_model_schemas() -> None:
@@ -78,6 +82,9 @@ def test_openapi_registers_core_model_schemas() -> None:
         "ListingRequest",
         "ListingResponse",
         "MarketplaceListing",
+        "PostingCapabilities",
+        "FillResponse",
+        "MarketplaceInfo",
     ):
         assert name in components, f"missing OpenAPI schema: {name}"
 
