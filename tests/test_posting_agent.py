@@ -8,14 +8,25 @@ from mcp import ClientSession
 from mcp.types import CallToolResult, TextContent
 
 from app.config import Settings
-from app.services.posting.agent import CURATED_TOOLS, fill
-from app.services.posting.profiles import FACEBOOK_MARKETPLACE_PROFILE
+from app.services.posting.agent import (
+    APPIUM_CURATED_TOOLS,
+    CURATED_TOOLS,
+    fill,
+)
+from app.services.posting.profiles import FACEBOOK_MARKETPLACE_PROFILE, OFFERUP_PROFILE
 
 _ALL_OPENAI_TOOLS = [
     {"type": "function", "function": {"name": "fill", "parameters": {}}},
     {"type": "function", "function": {"name": "take_snapshot", "parameters": {}}},
     # Not in CURATED_TOOLS; must be filtered out before being handed to the model.
     {"type": "function", "function": {"name": "emulate_network", "parameters": {}}},
+]
+
+_ALL_OPENAI_TOOLS_APPIUM = [
+    {"type": "function", "function": {"name": "appium_gesture", "parameters": {}}},
+    {"type": "function", "function": {"name": "appium_screenshot", "parameters": {}}},
+    # Not in APPIUM_CURATED_TOOLS; must be filtered out.
+    {"type": "function", "function": {"name": "appium_uninstall_app", "parameters": {}}},
 ]
 
 
@@ -159,3 +170,46 @@ async def test_fill_loop_records_error_tool_results() -> None:
 
     assert steps[0] == "fill: error"
     assert steps[1] == "Done despite the error."
+
+
+async def test_fill_loop_uses_appium_curated_tools_for_offerup() -> None:
+    session = _fake_session()
+    tool_call = _fake_tool_call("call-1", "appium_gesture")
+    first_response = _fake_response(_fake_message(tool_calls=[tool_call]))
+    second_response = _fake_response(_fake_message(content="All fields filled."))
+
+    tool_result = CallToolResult(
+        content=[TextContent(type="text", text="tapped sell button")], isError=False
+    )
+
+    with (
+        patch(
+            "app.services.posting.agent.load_mcp_tools",
+            AsyncMock(return_value=_ALL_OPENAI_TOOLS_APPIUM),
+        ),
+        patch(
+            "app.services.posting.agent.litellm.acompletion",
+            AsyncMock(side_effect=[first_response, second_response]),
+        ) as mock_acompletion,
+        patch(
+            "app.services.posting.agent.call_openai_tool",
+            AsyncMock(return_value=tool_result),
+        ),
+    ):
+        steps = await fill(
+            session,
+            OFFERUP_PROFILE,
+            title="Couch",
+            description="Great couch",
+            price=100.0,
+            image_paths=["/tmp/couch.jpg"],
+            settings=Settings(posting_max_steps=5),
+        )
+
+    assert steps == ["appium_gesture: ok", "All fields filled."]
+
+    # Only appium curated tools are handed to the model — non-curated ones are filtered out.
+    _, first_call_kwargs = mock_acompletion.await_args_list[0]
+    tool_names = {tool["function"]["name"] for tool in first_call_kwargs["tools"]}
+    assert tool_names == {"appium_gesture", "appium_screenshot"}
+    assert tool_names.issubset(APPIUM_CURATED_TOOLS)

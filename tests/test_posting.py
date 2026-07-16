@@ -1,6 +1,6 @@
 """Profiles, prompt builder, temp-image handling, and `/api/post/*` endpoint tests.
 
-`open_browser_session` / `fill` are mocked throughout — no real Chrome/MCP
+`open_session` / `fill` are mocked throughout — no real Chrome/MCP/Appium
 process is ever spawned by these tests.
 """
 
@@ -17,6 +17,7 @@ from app.main import app
 from app.prompts.posting import build_posting_system_prompt
 from app.services.posting.profiles import (
     FACEBOOK_MARKETPLACE_PROFILE,
+    OFFERUP_PROFILE,
     get_profile,
     list_profiles,
 )
@@ -39,15 +40,15 @@ class _RaisingSession:
     """Fake async context manager whose `__aenter__` always raises."""
 
     async def __aenter__(self) -> None:
-        raise RuntimeError("chrome not reachable")
+        raise RuntimeError("backend not reachable")
 
     async def __aexit__(self, *exc_info: object) -> bool:
         return False
 
 
-def _fake_open_browser_session_factory(fake_session: str = "fake-session"):
+def _fake_open_session_factory(fake_session: str = "fake-session"):
     @asynccontextmanager
-    async def _fake(settings: Settings | None = None):
+    async def _fake(profile=None, settings: Settings | None = None):
         yield fake_session
 
     return _fake
@@ -69,9 +70,21 @@ def test_get_profile_returns_none_for_unregistered_marketplace() -> None:
     assert get_profile("craigslist") is None
 
 
-def test_list_profiles_includes_facebook_marketplace() -> None:
+def test_get_profile_returns_registered_offerup() -> None:
+    profile = get_profile("offerup")
+    assert profile is not None
+    assert profile is OFFERUP_PROFILE
+    assert profile.label == "OfferUp"
+    assert profile.mcp_backend == "appium"
+    assert profile.app_package == "com.offerup"
+    assert profile.create_url == ""
+    assert "Post" in profile.fill_instructions
+
+
+def test_list_profiles_includes_both_marketplaces() -> None:
     ids = [profile.id for profile in list_profiles()]
     assert "facebook_marketplace" in ids
+    assert "offerup" in ids
 
 
 # ── Prompt builder ─────────────────────────────────────────────────────────
@@ -104,6 +117,34 @@ def test_build_posting_system_prompt_handles_missing_price_and_images() -> None:
     )
     assert "not provided" in prompt
     assert "(none provided)" in prompt
+
+
+def test_build_posting_system_prompt_offerup_uses_mobile_app_wording() -> None:
+    prompt = build_posting_system_prompt(
+        OFFERUP_PROFILE,
+        title="Couch",
+        description="Great couch",
+        price=100.0,
+        image_paths=["/tmp/couch.jpg"],
+    )
+    assert "mobile-app automation agent" in prompt
+    assert "App package: com.offerup" in prompt
+    assert "Couch" in prompt
+    assert "100.0" in prompt
+    assert "browser-automation" not in prompt
+
+
+def test_build_posting_system_prompt_facebook_uses_browser_wording() -> None:
+    prompt = build_posting_system_prompt(
+        FACEBOOK_MARKETPLACE_PROFILE,
+        title="Lamp",
+        description="Nice",
+        price=25.0,
+        image_paths=[],
+    )
+    assert "browser-automation agent" in prompt
+    assert "Create-listing URL:" in prompt
+    assert "mobile-app" not in prompt
 
 
 # ── Temp-image handling ────────────────────────────────────────────────────
@@ -146,6 +187,7 @@ def test_capabilities_endpoint_lists_marketplaces_when_enabled() -> None:
     assert {"id": "facebook_marketplace", "label": "Facebook Marketplace"} in body[
         "marketplaces"
     ]
+    assert {"id": "offerup", "label": "OfferUp"} in body["marketplaces"]
 
 
 def test_capabilities_endpoint_returns_no_marketplaces_when_disabled() -> None:
@@ -165,7 +207,7 @@ def test_capabilities_endpoint_returns_no_marketplaces_when_disabled() -> None:
 def test_fill_endpoint_happy_path_returns_step_summary() -> None:
     fake_run_fill = AsyncMock(return_value=["navigate_page: ok", "fill: ok"])
     with (
-        patch("app.api.posting.open_browser_session", _fake_open_browser_session_factory()),
+        patch("app.api.posting.open_session", _fake_open_session_factory()),
         patch("app.api.posting.run_fill", fake_run_fill),
     ):
         response = client.post(
@@ -201,7 +243,7 @@ def test_fill_endpoint_passes_parsed_fields_and_saved_image_paths_to_fill() -> N
         return ["ok"]
 
     with (
-        patch("app.api.posting.open_browser_session", _fake_open_browser_session_factory()),
+        patch("app.api.posting.open_session", _fake_open_session_factory()),
         patch("app.api.posting.run_fill", _capturing_fill),
     ):
         response = client.post(
@@ -221,6 +263,30 @@ def test_fill_endpoint_passes_parsed_fields_and_saved_image_paths_to_fill() -> N
     assert captured["description"] == "Nice lamp"
     assert captured["price"] is None
     assert captured["image_bytes"] == [b"fake-bytes"]
+
+
+def test_fill_endpoint_happy_path_offerup() -> None:
+    fake_run_fill = AsyncMock(return_value=["appium_session_management: ok", "appium_gesture: ok"])
+    with (
+        patch("app.api.posting.open_session", _fake_open_session_factory()),
+        patch("app.api.posting.run_fill", fake_run_fill),
+    ):
+        response = client.post(
+            "/api/post/fill",
+            data={
+                "marketplace": "offerup",
+                "title": "Couch",
+                "description": "Great couch",
+                "price": "100",
+            },
+            files={"images": ("photo.jpg", io.BytesIO(b"fake-bytes"), "image/jpeg")},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "filled"
+    assert body["steps_summary"] == ["appium_session_management: ok", "appium_gesture: ok"]
+    fake_run_fill.assert_awaited_once()
 
 
 def test_fill_endpoint_unknown_marketplace_returns_400() -> None:
@@ -244,7 +310,7 @@ def test_fill_endpoint_returns_400_when_posting_disabled() -> None:
 
 
 def test_fill_endpoint_returns_502_when_browser_session_fails() -> None:
-    with patch("app.api.posting.open_browser_session", lambda settings=None: _RaisingSession()):
+    with patch("app.api.posting.open_session", lambda profile, settings=None: _RaisingSession()):
         response = client.post(
             "/api/post/fill",
             data={"marketplace": "facebook_marketplace", "title": "T", "description": "D"},
@@ -253,9 +319,19 @@ def test_fill_endpoint_returns_502_when_browser_session_fails() -> None:
     assert "chrome" in response.json()["detail"].lower()
 
 
+def test_fill_endpoint_returns_502_when_appium_session_fails() -> None:
+    with patch("app.api.posting.open_session", lambda profile, settings=None: _RaisingSession()):
+        response = client.post(
+            "/api/post/fill",
+            data={"marketplace": "offerup", "title": "T", "description": "D"},
+        )
+    assert response.status_code == 502
+    assert "emulator" in response.json()["detail"].lower()
+
+
 def test_fill_endpoint_returns_502_when_fill_raises() -> None:
     with (
-        patch("app.api.posting.open_browser_session", _fake_open_browser_session_factory()),
+        patch("app.api.posting.open_session", _fake_open_session_factory()),
         patch("app.api.posting.run_fill", AsyncMock(side_effect=RuntimeError("model error"))),
     ):
         response = client.post(
