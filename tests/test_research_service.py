@@ -2,7 +2,7 @@ import json
 from unittest.mock import AsyncMock
 
 from app.schemas.research import ResearchRequest
-from app.services.research import ResearchService
+from app.services.research import MAX_SEARCH_QUERY_LEN, ResearchService
 from app.services.search import SearchResult
 
 
@@ -52,3 +52,38 @@ async def test_research_dedupes_source_urls() -> None:
     response = await service.research(request)
 
     assert len(response.sources) == 1
+
+
+async def test_research_drops_noise_attributes_from_tavily_query() -> None:
+    """Identify provenance blobs must not blow past Tavily's 400-char query limit."""
+    search = AsyncMock()
+    search.search = AsyncMock(return_value=[])
+    llm = AsyncMock()
+    llm.chat = AsyncMock(return_value="{}")
+
+    bloated_matches = "x" * 500
+    service = ResearchService(llm, search)
+    request = ResearchRequest(
+        item_name="Vintage Blue Jeans",
+        brand="Levi's",
+        model="501",
+        attributes={
+            "size": "32",
+            "color": "blue",
+            "style": "vintage",
+            "search_matches": bloated_matches,
+            "reasoning": "long explanation " * 40,
+        },
+    )
+
+    await service.research(request)
+
+    assert search.search.await_count == 2
+    for call in search.search.await_args_list:
+        query = call.kwargs.get("query") or call.args[0]
+        assert len(query) <= MAX_SEARCH_QUERY_LEN
+        assert "search_matches" not in query
+        assert bloated_matches not in query
+        assert "Levi's" in query
+        assert "501" in query
+        assert "size: 32" in query

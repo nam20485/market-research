@@ -9,6 +9,21 @@ from app.services.llm import LLMService
 from app.services.search import SearchProvider, SearchResult
 
 MAX_RESULTS_PER_QUERY = 5
+# Tavily rejects queries longer than this; leave headroom for query suffixes
+# like " sold price used".
+MAX_SEARCH_QUERY_LEN = 400
+_QUERY_SUFFIX_BUDGET = len(" for sale used marketplace")
+# Identify sometimes stuffs provenance blobs into attributes (e.g. search_matches);
+# those must not be concatenated into the Tavily query.
+_NOISE_ATTRIBUTE_KEYS = frozenset(
+    {
+        "search_matches",
+        "reasoning",
+        "evidence",
+        "sources",
+        "notes",
+    }
+)
 
 
 class ResearchService:
@@ -42,8 +57,8 @@ class ResearchService:
 
     async def _gather_results(self, item_label: str) -> list[SearchResult]:
         queries = [
-            f"{item_label} sold price used",
-            f"{item_label} for sale used marketplace",
+            _fit_search_query(f"{item_label} sold price used"),
+            _fit_search_query(f"{item_label} for sale used marketplace"),
         ]
         results: list[SearchResult] = []
         for query in queries:
@@ -55,9 +70,31 @@ class ResearchService:
         parts = [request.brand, request.model or request.item_name]
         label = " ".join(part for part in parts if part)
         if request.attributes:
-            attrs = ", ".join(f"{k}: {v}" for k, v in request.attributes.items())
-            label = f"{label} ({attrs})"
+            attrs = ", ".join(
+                f"{k}: {_short_attr_value(v)}"
+                for k, v in request.attributes.items()
+                if k.lower() not in _NOISE_ATTRIBUTE_KEYS and v
+            )
+            if attrs:
+                label = f"{label} ({attrs})"
+        # Cap so either query suffix still fits under Tavily's limit.
+        max_label = MAX_SEARCH_QUERY_LEN - _QUERY_SUFFIX_BUDGET
+        if len(label) > max_label:
+            label = label[: max_label - 1].rstrip() + "…"
         return label
+
+
+def _short_attr_value(value: str, max_len: int = 40) -> str:
+    text = value.strip()
+    if len(text) <= max_len:
+        return text
+    return text[: max_len - 1].rstrip() + "…"
+
+
+def _fit_search_query(query: str) -> str:
+    if len(query) <= MAX_SEARCH_QUERY_LEN:
+        return query
+    return query[: MAX_SEARCH_QUERY_LEN - 1].rstrip() + "…"
 
 
 def _dedupe_sources(sources: Iterable[SourceLink]) -> list[SourceLink]:
