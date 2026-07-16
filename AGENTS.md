@@ -59,6 +59,14 @@ inference features. Cloudflare/GCP deploy secrets live in GitHub Actions repo se
 Cloud Run's runtime secrets (LLM/vision/OpenAI/Tavily/ZAI API keys) live in GCP Secret
 Manager, populated via `gcloud secrets versions add`, also never in `.env` or git.
 
+Do not conflate the two backend URL env vars:
+
+- `BACKEND_PROXY_TARGET` — server-only (Compose / Vite config). Points the Vite proxy at
+  `http://backend:8000` on the Compose network. Must **not** use the `VITE_` prefix, or
+  the Docker-internal hostname is baked into the browser bundle and client fetch fails.
+- `VITE_BACKEND_URL` — browser-facing. Leave unset for local/Compose (relative `/api` +
+  proxy). Set only for Cloudflare Pages builds to the public Cloud Run origin.
+
 ## CI/CD & Deployment
 
 - CI (`ci.yml`) is safe and non-deploying: it runs on every push/PR.
@@ -69,20 +77,23 @@ Manager, populated via `gcloud secrets versions add`, also never in `.env` or gi
 - Backend deploy target is now Google Cloud Run (not just GHCR): `google-cloudrun-deploy.yml`
   builds/pushes a SHA-tagged image to Artifact Registry and deploys the
   `market-research-backend` Cloud Run service in `us-central1`, authenticated via a
-  Service Account key (`secrets.GCP_SA_KEY`), not WIF. `publish-backend-image.yml` (GHCR)
-  is now superseded/dormant — kept for reference only.
+  Service Account key (`secrets.GCP_SA_KEY`), not WIF. Free-tier-friendly with
+  `min_instance_count = 0` (scale-to-zero). `publish-backend-image.yml` (GHCR) is now
+  superseded/dormant — kept for reference only.
 - `deploy/tf/` provisions the Cloudflare Pages project AND the GCP Cloud Run backend
   (Artifact Registry repo, deploy + runtime service accounts, Secret Manager secret
   containers, the Cloud Run service) in one Terraform state, and pushes CI secrets/vars
   (`GCP_SA_KEY` secret, `VITE_BACKEND_URL` and `GCP_PROJECT_ID` variables) into GitHub Actions.
-  Never commit `.tfvars` or `terraform.tfstate`. Keep the Terraform
-  `cloudflare_pages_project` name identical to the `projectName` used in
-  `cloudflare_deploy.yml` — a mismatch there was a known bug in the reference repo this
-  was modeled on.
+  Never commit `.tfvars` or `terraform.tfstate` (the SA key also lands in local tfstate —
+  keep it gitignored). Keep the Terraform `cloudflare_pages_project` name identical to the
+  `projectName` used in `cloudflare_deploy.yml` — a mismatch there was a known bug in the
+  reference repo this was modeled on.
 - Frontend/backend topology is two independent deploys, not a unified Worker: Cloudflare
   Pages (frontend) calls the Cloud Run backend directly, cross-origin, at build-time-baked
   `VITE_BACKEND_URL`. They're coupled only via CORS (`CORS_ORIGINS` env / `frontend_origin`
   Terraform var), not same-origin routing.
+- Cloud Run is public via `allUsers` / `roles/run.invoker`. An org policy that blocks
+  `allUsers` will break browser access; personal accounts are usually fine.
 - Cloud Run secret values (`LLM_API_KEY`, `VISION_API_KEY`, `OPENAI_API_KEY`,
   `TAVILY_API_KEY`, `ZAI_API_KEY`) are added out-of-band via
   `gcloud secrets versions add <NAME> --data-file=-` — Terraform only creates the Secret
@@ -105,5 +116,12 @@ Git history uses imperative, descriptive commit messages (e.g., "Add initial imp
   `google-cloudrun-deploy.yml`. `publish-backend-image.yml` (GHCR,
   `ghcr.io/<owner>/<repo>-backend`) is superseded/dormant, kept only for reference.
   Frontend deploys to Cloudflare Pages.
+- Compose must set `BACKEND_PROXY_TARGET=http://backend:8000` for the Vite server proxy —
+  never `VITE_BACKEND_URL` (that bakes `backend` into the browser and causes
+  "Failed to fetch"). Pages builds use `VITE_BACKEND_URL` for the public Cloud Run URL.
+- Research search queries must stay ≤400 chars (Tavily limit). Identify can stuff large
+  provenance into attributes (`search_matches`, `reasoning`); `ResearchService` drops those
+  noise keys and caps query length — do not reintroduce raw attribute dumps into Tavily
+  queries.
 - `.env` is loaded via pydantic-settings without shell-style `$VAR` interpolation; LiteLLM provider keys such as `ZAI_API_KEY` (for `zai/` models) must come from the process/container environment, not from expanding variables inside `.env`.
 - OpenAI-compatible providers use the `openai/<model>` LiteLLM prefix with `LLM_API_BASE` / `LLM_API_KEY` (and optional `VISION_*`; blank vision base/key inherit from LLM). Z.AI coding plan (`zai/`) is text-only — point vision at a separate provider.
