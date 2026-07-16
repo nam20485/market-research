@@ -61,7 +61,9 @@ This starts:
 
 - `backend` — the FastAPI app, built from the root `Dockerfile`, on `http://localhost:8000`
 - `frontend` — the Vite dev server (with HMR), built from `frontend/Dockerfile`'s `dev`
-  stage, on `http://localhost:5173`, proxying to `backend` over the Compose network
+  stage, on `http://localhost:5173`, proxying `/api` and `/healthz` to `backend` over the
+  Compose network via `BACKEND_PROXY_TARGET` (server-only; not a `VITE_*` var, so it is
+  never baked into the browser bundle)
 
 For a "prod-like" local preview that serves the static `pnpm build` output (the same
 `frontend/dist` artifact later deployed to Cloudflare Pages) via nginx instead of the Vite
