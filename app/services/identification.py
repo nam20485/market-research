@@ -41,7 +41,7 @@ class IdentificationService:
         top_candidate = candidates[0] if candidates else None
         locked = bool(parsed.get("locked", False)) and top_candidate is not None
         if top_candidate and top_candidate.confidence >= LOCK_CONFIDENCE_THRESHOLD:
-            locked = locked or bool(parsed.get("locked", False))
+            locked = True
 
         if not locked and top_candidate is not None:
             name_or_model = top_candidate.model or top_candidate.name
