@@ -233,4 +233,35 @@ describe('PostToMarketplaceDialog', () => {
       )
     })
   })
+
+  it('shows OfferUp-specific title and emulator readiness instructions', () => {
+    render(
+      <PostToMarketplaceDialog
+        marketplace="offerup"
+        listing={listing}
+        research={null}
+        onClose={vi.fn()}
+      />,
+    )
+    expect(screen.getByRole('dialog', { name: /post to offerup/i })).toBeInTheDocument()
+    expect(screen.getByText(/android emulator/i)).toBeInTheDocument()
+    expect(screen.getByText(/offerup app/i)).toBeInTheDocument()
+    expect(screen.queryByText(/chrome/i)).not.toBeInTheDocument()
+  })
+
+  it('shows Facebook-specific title and Chrome readiness instructions', () => {
+    render(
+      <PostToMarketplaceDialog
+        marketplace="facebook_marketplace"
+        listing={listing}
+        research={null}
+        onClose={vi.fn()}
+      />,
+    )
+    expect(
+      screen.getByRole('dialog', { name: /post to facebook marketplace/i }),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/open chrome/i)).toBeInTheDocument()
+    expect(screen.getByText(/remote debugging/i)).toBeInTheDocument()
+  })
 })
