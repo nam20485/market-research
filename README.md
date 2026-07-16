@@ -119,18 +119,65 @@ See [frontend/README.md](frontend/README.md) for the Vite + React wizard UI
   ACTUALLY DEPLOY YET.*
   - `.github/workflows/cloudflare_deploy.yml` — builds `frontend/dist` and publishes it to
     Cloudflare Pages via `cloudflare/pages-action`. Needs `CLOUDFLARE_API_TOKEN` /
-    `CLOUDFLARE_ACCOUNT_ID` repo secrets (see `deploy/tf/`).
-  - `.github/workflows/publish-backend-image.yml` — builds the root `Dockerfile` and
-    pushes it to GHCR (`ghcr.io/<owner>/market-research-backend`). Actual hosting target
-    for the backend container is deferred/undecided; this only builds and publishes the
-    image.
-- `deploy/tf/` — Terraform for the Cloudflare Pages project
-  (`cloudflare_pages_project.market_research`, name kept identical to the
-  `projectName` used in `cloudflare_deploy.yml`) plus `github_actions_secret` resources
-  for `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID`. No `.tfvars` are committed —
-  supply `cloudflare_api_token`, `cloudflare_account_id`, `github_token`,
-  `github_username`, `github_repo_name` yourself (e.g. via an untracked `.tfvars` file or
-  `TF_VAR_*` env vars) when/if you actually run `terraform plan`/`apply`.
+    `CLOUDFLARE_ACCOUNT_ID` repo secrets (see `deploy/tf/`). The build step now sets
+    `VITE_BACKEND_URL` (from the `VITE_BACKEND_URL` Actions variable) so the built bundle
+    calls the deployed Cloud Run backend directly instead of a relative path.
+  - `.github/workflows/google-cloudrun-deploy.yml` — **new.** Builds the root `Dockerfile`,
+    pushes a SHA-tagged image to Artifact Registry
+    (`us-central1-docker.pkg.dev/<project>/market-research/market-research-backend:<sha>`),
+    and deploys it to the `market-research-backend` Cloud Run service in `us-central1`.
+    Free-tier-friendly and scale-to-zero (`min_instance_count = 0`). Auth is via a Service
+    Account key JSON (`secrets.GCP_SA_KEY`), not Workload Identity Federation.
+  - `.github/workflows/publish-backend-image.yml` — **superseded/dormant.** Backend hosting
+    now targets Cloud Run (above), which pulls from Artifact Registry, not GHCR. This
+    workflow still builds/pushes to GHCR
+    (`ghcr.io/<owner>/market-research-backend`) if manually triggered, but is kept only for
+    reference/fallback.
+- `deploy/tf/` — Terraform for both the Cloudflare Pages project and the GCP Cloud Run
+  backend, in one state:
+  - Cloudflare: `cloudflare_pages_project.market_research` (name kept identical to the
+    `projectName` used in `cloudflare_deploy.yml`) plus `github_actions_secret` resources
+    for `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID`.
+  - GCP (`deploy/tf/gcp.tf`): an Artifact Registry Docker repo (`market-research`, in
+    `us-central1`); a deploy service account (`market-research-deploy`, with a JSON key)
+    used by CI; a runtime service account (`market-research-runtime`) that the Cloud Run
+    service runs as; Secret Manager secret *containers* for `LLM_API_KEY`,
+    `VISION_API_KEY`, `OPENAI_API_KEY`, `TAVILY_API_KEY`, `ZAI_API_KEY` (values are **not**
+    set by Terraform — see below); the `market-research-backend` Cloud Run service itself
+    (scale-to-zero, public via `allUsers` invoker); and `github_actions_secret.gcp_sa_key`
+    (`GCP_SA_KEY`) + `github_actions_variable.vite_backend_url` (`VITE_BACKEND_URL`,
+    populated from the Cloud Run service's URL) pushed straight into GitHub Actions.
+  - No `.tfvars` are committed — supply `cloudflare_api_token`, `cloudflare_account_id`,
+    `github_token`, `github_username`, `github_repo_name`, `gcp_project_id` (and optionally
+    `gcp_region` / `frontend_origin`, which default to `us-central1` /
+    `https://market-research.pages.dev`) yourself (e.g. via an untracked `.tfvars` file or
+    `TF_VAR_*` env vars) when/if you actually run `terraform plan`/`apply`.
+
+### Populating Cloud Run secrets
+
+Terraform only creates the Secret Manager secret *containers* — it deliberately never
+writes secret values, so they never enter tfstate or git. After `terraform apply`, add each
+value out-of-band:
+
+```bash
+gcloud secrets versions add LLM_API_KEY --project=<PROJECT_ID> --data-file=-
+gcloud secrets versions add VISION_API_KEY --project=<PROJECT_ID> --data-file=-
+gcloud secrets versions add OPENAI_API_KEY --project=<PROJECT_ID> --data-file=-
+gcloud secrets versions add TAVILY_API_KEY --project=<PROJECT_ID> --data-file=-
+gcloud secrets versions add ZAI_API_KEY --project=<PROJECT_ID> --data-file=-
+```
+
+Each command reads the secret value from stdin (pipe it in, or type it and press
+Ctrl-D) — only set the ones your provider configuration actually needs.
+
+### Required GitHub Actions configuration
+
+| Name | Kind | Set by |
+| --- | --- | --- |
+| `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | secret | Terraform (`deploy/tf/main.tf`) |
+| `GCP_SA_KEY` | secret | Terraform (`deploy/tf/gcp.tf`) |
+| `VITE_BACKEND_URL` | variable | Terraform (`deploy/tf/gcp.tf`, from the Cloud Run URL) |
+| `GCP_PROJECT_ID` | variable | Terraform (`deploy/tf/gcp.tf`, mirrors the `gcp_project_id` input variable) |
 
 ## Model & provider configuration
 
