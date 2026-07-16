@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
-import { generateListing } from '../api.js'
+import { generateListing, getPostingCapabilities } from '../api.js'
 import { logger } from '../logger.js'
+import PostToMarketplaceDialog from './PostToMarketplaceDialog.jsx'
 import StatusLog, { itemDisplayName, useStatusLog } from './StatusLog.jsx'
 
-function ListingCard({ marketplace, listing }) {
+function ListingCard({ marketplace, listing, headerExtra }) {
   const [copied, setCopied] = useState(false)
 
   async function handleCopy() {
@@ -19,17 +20,20 @@ function ListingCard({ marketplace, listing }) {
 
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-gray-200 p-4 dark:border-gray-700">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
           {marketplace}
         </h3>
-        <button
-          type="button"
-          onClick={handleCopy}
-          className="rounded-md border border-gray-300 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
-        >
-          {copied ? 'Copied!' : 'Copy to clipboard'}
-        </button>
+        <div className="flex items-center gap-2">
+          {headerExtra}
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="rounded-md border border-gray-300 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
+          >
+            {copied ? 'Copied!' : 'Copy to clipboard'}
+          </button>
+        </div>
       </div>
       <p className="font-medium text-gray-900 dark:text-gray-50">{listing.title}</p>
       <p className="whitespace-pre-wrap text-sm text-gray-600 dark:text-gray-300">
@@ -39,10 +43,14 @@ function ListingCard({ marketplace, listing }) {
   )
 }
 
-export default function ListingStep({ item, research, onBack, onStartOver }) {
+const FACEBOOK_MARKETPLACE_ID = 'facebook_marketplace'
+
+export default function ListingStep({ item, research, photos = [], onBack, onStartOver }) {
   const [listing, setListing] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [capabilities, setCapabilities] = useState(null)
+  const [showPostDialog, setShowPostDialog] = useState(false)
   const { lines: statusLines, start: startStatus, finish: finishStatus, fail: failStatus, reset: resetStatus } =
     useStatusLog()
 
@@ -74,6 +82,26 @@ export default function ListingStep({ item, research, onBack, onStartOver }) {
   useEffect(() => {
     runGenerate()
   }, [runGenerate])
+
+  useEffect(() => {
+    let active = true
+    getPostingCapabilities()
+      .then((result) => {
+        if (active) setCapabilities(result)
+      })
+      .catch((err) => {
+        logger.warn('posting capabilities unavailable', err)
+        if (active) setCapabilities({ enabled: false, marketplaces: [] })
+      })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const canPostToFacebook =
+    Boolean(capabilities?.enabled) &&
+    Boolean(capabilities?.marketplaces?.some((m) => m.id === FACEBOOK_MARKETPLACE_ID)) &&
+    Boolean(listing?.facebook_marketplace)
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
@@ -108,6 +136,17 @@ export default function ListingStep({ item, research, onBack, onStartOver }) {
               <ListingCard
                 marketplace="Facebook Marketplace"
                 listing={listing.facebook_marketplace}
+                headerExtra={
+                  canPostToFacebook && (
+                    <button
+                      type="button"
+                      onClick={() => setShowPostDialog(true)}
+                      className="rounded-md border border-indigo-300 px-3 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-50 dark:border-indigo-700 dark:text-indigo-300 dark:hover:bg-indigo-950"
+                    >
+                      Post to Facebook Marketplace
+                    </button>
+                  )
+                }
               />
             )}
             {listing.offerup && (
@@ -132,6 +171,16 @@ export default function ListingStep({ item, research, onBack, onStartOver }) {
             </button>
           </div>
         </div>
+      )}
+
+      {showPostDialog && listing?.facebook_marketplace && (
+        <PostToMarketplaceDialog
+          marketplace={FACEBOOK_MARKETPLACE_ID}
+          listing={listing.facebook_marketplace}
+          research={research}
+          photos={photos}
+          onClose={() => setShowPostDialog(false)}
+        />
       )}
     </div>
   )

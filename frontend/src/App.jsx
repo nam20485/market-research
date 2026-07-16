@@ -52,9 +52,11 @@ export default function App() {
   const [step, setStep] = useState(STEP.IDENTIFY)
   const [lockedItem, setLockedItem] = useState(null)
   const [research, setResearch] = useState(null)
+  const [photos, setPhotos] = useState([])
 
-  function handleItemLocked(item) {
+  function handleItemLocked(item, _context, lockedPhotos) {
     setLockedItem(item)
+    setPhotos(lockedPhotos ?? [])
     setStep(STEP.RESEARCH)
   }
 
@@ -66,6 +68,7 @@ export default function App() {
   function handleStartOver() {
     setLockedItem(null)
     setResearch(null)
+    setPhotos([])
     setStep(STEP.IDENTIFY)
   }
 
@@ -101,6 +104,7 @@ export default function App() {
           <ListingStep
             item={lockedItem}
             research={research}
+            photos={photos}
             onBack={() => setStep(STEP.RESEARCH)}
             onStartOver={handleStartOver}
           />

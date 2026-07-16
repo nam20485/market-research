@@ -7,9 +7,17 @@ vi.mock('./api.js', () => ({
   identifyItem: vi.fn(),
   requestResearch: vi.fn(),
   generateListing: vi.fn(),
+  getPostingCapabilities: vi.fn(),
+  fillMarketplaceListing: vi.fn(),
 }))
 
-import { generateListing, identifyItem, requestResearch } from './api.js'
+import {
+  fillMarketplaceListing,
+  generateListing,
+  getPostingCapabilities,
+  identifyItem,
+  requestResearch,
+} from './api.js'
 
 afterEach(() => {
   cleanup()
@@ -20,6 +28,12 @@ afterEach(() => {
 
 beforeEach(() => {
   window.localStorage.setItem('theme', 'dark')
+  URL.createObjectURL = vi.fn(() => 'blob:preview')
+  URL.revokeObjectURL = vi.fn()
+  getPostingCapabilities.mockResolvedValue({
+    enabled: true,
+    marketplaces: [{ id: 'facebook_marketplace', label: 'Facebook Marketplace' }],
+  })
 })
 
 describe('App wizard', () => {
@@ -92,6 +106,58 @@ describe('App wizard', () => {
       screen.getByRole('button', { name: /start over with a new item/i }),
     )
     expect(screen.getByText(/identify your item/i)).toBeInTheDocument()
+  })
+
+  it('passes photos accumulated during identify through to the post-to-Facebook dialog', async () => {
+    const user = userEvent.setup()
+    identifyItem.mockResolvedValue({
+      candidates: [{ name: 'Widget', brand: 'Acme', confidence: 0.95 }],
+      locked: true,
+    })
+    requestResearch.mockResolvedValue({
+      price_range: { summary: '$10-$20' },
+      demand: 'High',
+      marketing_angle: 'Angle',
+      sources: [],
+      pricing: { listing_price: 63.25 },
+    })
+    generateListing.mockResolvedValue({
+      facebook_marketplace: { title: 'FB', description: 'FB body' },
+      offerup: { title: 'OU', description: 'OU body' },
+    })
+    fillMarketplaceListing.mockResolvedValue({ status: 'filled', steps_summary: [] })
+
+    render(<App />)
+
+    const file = new File(['abc'], 'widget.jpg', { type: 'image/jpeg' })
+    await user.upload(screen.getByLabelText(/photos/i), file)
+    await user.type(screen.getByLabelText(/describe the item/i), 'a widget')
+    await user.click(screen.getByRole('button', { name: /identify item/i }))
+    await waitFor(() => expect(screen.getAllByText('Widget').length).toBeGreaterThan(0))
+    await user.click(screen.getAllByRole('button', { name: /Widget/i }).at(-1))
+    await user.click(
+      screen.getByRole('button', { name: /confirm & continue to research/i }),
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Market research report')).toBeInTheDocument()
+    })
+    await user.click(
+      screen.getByRole('button', { name: /approve & continue to listing/i }),
+    )
+    await waitFor(() => expect(screen.getByText('FB')).toBeInTheDocument())
+
+    const postButton = await screen.findByRole('button', {
+      name: /post to facebook marketplace/i,
+    })
+    await user.click(postButton)
+    await user.click(screen.getByRole('button', { name: /ok, fill the form/i }))
+
+    await waitFor(() => {
+      expect(fillMarketplaceListing).toHaveBeenCalledWith(
+        expect.objectContaining({ images: [file] }),
+      )
+    })
   })
 
   it('toggles theme between dark and light', async () => {

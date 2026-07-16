@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   checkHealth,
+  fillMarketplaceListing,
   generateListing,
+  getPostingCapabilities,
   identifyItem,
   requestResearch,
 } from '../src/api.js'
@@ -399,6 +401,104 @@ describe('api client contract', () => {
       expect(JSON.parse(fetch.mock.calls[0][1].body).research_summary).toBe(
         'Price: USD 42. Demand: High',
       )
+    })
+  })
+
+  describe('getPostingCapabilities', () => {
+    it('GETs /api/post/capabilities', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () =>
+          Response.json({
+            enabled: true,
+            marketplaces: [{ id: 'facebook_marketplace', label: 'Facebook Marketplace' }],
+          }),
+        ),
+      )
+      await expect(getPostingCapabilities()).resolves.toEqual({
+        enabled: true,
+        marketplaces: [{ id: 'facebook_marketplace', label: 'Facebook Marketplace' }],
+      })
+      expect(fetch).toHaveBeenCalledWith('/api/post/capabilities')
+    })
+  })
+
+  describe('fillMarketplaceListing', () => {
+    it('posts multipart with marketplace, title, description, price, and images', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () =>
+          Response.json({ status: 'filled', steps_summary: ['fill: ok'] }),
+        ),
+      )
+      const file = new File(['img'], 'lamp.jpg', { type: 'image/jpeg' })
+
+      await fillMarketplaceListing({
+        marketplace: 'facebook_marketplace',
+        listing: { title: 'Lamp', description: 'Nice lamp' },
+        price: 25.5,
+        images: [file],
+      })
+
+      const [url, options] = fetch.mock.calls[0]
+      expect(url).toBe('/api/post/fill')
+      expect(options.body).toBeInstanceOf(FormData)
+      expect(options.body.get('marketplace')).toBe('facebook_marketplace')
+      expect(options.body.get('title')).toBe('Lamp')
+      expect(options.body.get('description')).toBe('Nice lamp')
+      expect(options.body.get('price')).toBe('25.5')
+      expect(options.body.get('images')).toBeInstanceOf(File)
+    })
+
+    it('omits price when undefined, null, or an empty string', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => Response.json({ status: 'filled', steps_summary: [] })),
+      )
+
+      await fillMarketplaceListing({
+        marketplace: 'facebook_marketplace',
+        listing: { title: 'Lamp', description: 'D' },
+      })
+      expect(fetch.mock.calls[0][1].body.has('price')).toBe(false)
+
+      await fillMarketplaceListing({
+        marketplace: 'facebook_marketplace',
+        listing: { title: 'Lamp', description: 'D' },
+        price: null,
+      })
+      expect(fetch.mock.calls[1][1].body.has('price')).toBe(false)
+
+      await fillMarketplaceListing({
+        marketplace: 'facebook_marketplace',
+        listing: { title: 'Lamp', description: 'D' },
+        price: '',
+      })
+      expect(fetch.mock.calls[2][1].body.has('price')).toBe(false)
+    })
+
+    it('defaults title/description to empty strings when listing fields are missing', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => Response.json({ status: 'filled', steps_summary: [] })),
+      )
+      await fillMarketplaceListing({ marketplace: 'facebook_marketplace', listing: {} })
+      const body = fetch.mock.calls[0][1].body
+      expect(body.get('title')).toBe('')
+      expect(body.get('description')).toBe('')
+      expect(body.getAll('images')).toHaveLength(0)
+    })
+
+    it('surfaces backend errors via parseJsonOrThrow', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () =>
+          Response.json({ detail: 'Marketplace posting is disabled.' }, { status: 400 }),
+        ),
+      )
+      await expect(
+        fillMarketplaceListing({ marketplace: 'facebook_marketplace', listing: {} }),
+      ).rejects.toThrow('Request failed (400): Marketplace posting is disabled.')
     })
   })
 })

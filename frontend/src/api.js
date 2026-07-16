@@ -258,3 +258,47 @@ export async function generateListing({ item, research }) {
   })
   return parseJsonOrThrow(response)
 }
+
+/**
+ * Check whether the backend can auto-fill marketplace listings (local-only
+ * feature; disabled e.g. when pointed at Cloud Run).
+ * @returns {Promise<{ enabled: boolean, marketplaces: { id: string, label: string }[] }>}
+ */
+export async function getPostingCapabilities() {
+  logger.info('GET', `${API_BASE}/api/post/capabilities`)
+  const response = await fetch(`${API_BASE}/api/post/capabilities`)
+  return parseJsonOrThrow(response)
+}
+
+/**
+ * Auto-fill a marketplace's create-listing form via the backend's local
+ * browser-automation agent. Connect + fill + teardown happen server-side in
+ * a single request; the agent stops before Publish/Post for the user to submit.
+ *
+ * @param {{
+ *   marketplace: string,
+ *   listing: { title?: string, description?: string },
+ *   price?: number | string | null,
+ *   images?: File[],
+ * }} params
+ * @returns {Promise<{ status: string, steps_summary: string[], screenshot?: string | null }>}
+ */
+export async function fillMarketplaceListing({ marketplace, listing, price, images = [] }) {
+  const formData = new FormData()
+  formData.append('marketplace', marketplace)
+  formData.append('title', listing?.title ?? '')
+  formData.append('description', listing?.description ?? '')
+  if (price !== undefined && price !== null && price !== '') {
+    formData.append('price', String(price))
+  }
+  for (const image of images) {
+    formData.append('images', image)
+  }
+
+  logger.info('POST', `${API_BASE}/api/post/fill`, { marketplace, imageCount: images.length })
+  const response = await fetch(`${API_BASE}/api/post/fill`, {
+    method: 'POST',
+    body: formData,
+  })
+  return parseJsonOrThrow(response)
+}
