@@ -202,6 +202,51 @@ describe('api client contract', () => {
       )
       expect(fetch).not.toHaveBeenCalled()
     })
+
+    it('includes haggle_pct and floor_pct in the body when provided', async () => {
+      await requestResearch({
+        item: { item_name: 'Widget Pro' },
+        haggle_pct: 0.2,
+        floor_pct: 0.05,
+      })
+      expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({
+        item_name: 'Widget Pro',
+        brand: null,
+        model: null,
+        attributes: {},
+        condition: null,
+        haggle_pct: 0.2,
+        floor_pct: 0.05,
+      })
+    })
+
+    it('omits haggle_pct and floor_pct when undefined', async () => {
+      await requestResearch({ item: { item_name: 'Widget Pro' } })
+      const body = JSON.parse(fetch.mock.calls[0][1].body)
+      expect(body).not.toHaveProperty('haggle_pct')
+      expect(body).not.toHaveProperty('floor_pct')
+    })
+
+    it('omits haggle_pct and floor_pct when explicitly null', async () => {
+      await requestResearch({
+        item: { item_name: 'Widget Pro' },
+        haggle_pct: null,
+        floor_pct: null,
+      })
+      const body = JSON.parse(fetch.mock.calls[0][1].body)
+      expect(body).not.toHaveProperty('haggle_pct')
+      expect(body).not.toHaveProperty('floor_pct')
+    })
+
+    it('sends only haggle_pct when floor_pct is omitted', async () => {
+      await requestResearch({
+        item: { item_name: 'Widget Pro' },
+        haggle_pct: 0.25,
+      })
+      const body = JSON.parse(fetch.mock.calls[0][1].body)
+      expect(body.haggle_pct).toBe(0.25)
+      expect(body).not.toHaveProperty('floor_pct')
+    })
   })
 
   describe('generateListing', () => {
@@ -276,6 +321,84 @@ describe('api client contract', () => {
 
       await generateListing({ item: { name: 'Desk' }, research: null })
       expect(JSON.parse(fetch.mock.calls[1][1].body).research_summary).toBeNull()
+    })
+
+    it('prefers pricing.listing_price over price_range when both are present', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () =>
+          Response.json({
+            facebook_marketplace: { title: 'FB', description: 'x' },
+            offerup: { title: 'OU', description: 'y' },
+          }),
+        ),
+      )
+      await generateListing({
+        item: { name: 'Widget Pro' },
+        research: {
+          price_range: { low: 10, high: 20, summary: '$10-$20' },
+          pricing: { listing_price: 63.25, currency: 'USD', fmv: 55 },
+          demand: 'High',
+          marketing_angle: 'Highlight durability',
+        },
+      })
+      expect(JSON.parse(fetch.mock.calls[0][1].body).research_summary).toBe(
+        'Price: USD 63.25. Demand: High. Angle: Highlight durability',
+      )
+    })
+
+    it('falls back to price_range when pricing is missing or incomplete', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () =>
+          Response.json({
+            facebook_marketplace: { title: 'FB', description: 'x' },
+            offerup: { title: 'OU', description: 'y' },
+          }),
+        ),
+      )
+      await generateListing({
+        item: { name: 'Widget Pro' },
+        research: {
+          price_range: { summary: '$10-$20' },
+          pricing: null,
+          demand: 'High',
+        },
+      })
+      expect(JSON.parse(fetch.mock.calls[0][1].body).research_summary).toBe(
+        'Price: $10-$20. Demand: High',
+      )
+
+      await generateListing({
+        item: { name: 'Widget Pro' },
+        research: {
+          price_range: { summary: '$5-$9' },
+          pricing: { listing_price: 'not-a-number' },
+          demand: 'Low',
+        },
+      })
+      expect(JSON.parse(fetch.mock.calls[1][1].body).research_summary).toBe(
+        'Price: $5-$9. Demand: Low',
+      )
+    })
+
+    it('defaults pricing currency to USD when missing', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () =>
+          Response.json({
+            facebook_marketplace: { title: 'FB', description: 'x' },
+            offerup: { title: 'OU', description: 'y' },
+          }),
+        ),
+      )
+      await generateListing({
+        item: { name: 'Widget Pro' },
+        research: { pricing: { listing_price: 42 }, demand: 'High' },
+      })
+      expect(JSON.parse(fetch.mock.calls[0][1].body).research_summary).toBe(
+        'Price: USD 42. Demand: High',
+      )
     })
   })
 })
