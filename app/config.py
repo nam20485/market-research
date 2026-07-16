@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -26,7 +27,14 @@ class Settings(BaseSettings):
     Field names mirror the keys documented in `.env.example`.
     """
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+        # Lets tests/callers construct Settings(serpapi_api_key=...) directly, in
+        # addition to the SERPAPI_API_KEY/SERPAPI_KEY env var aliases below.
+        populate_by_name=True,
+    )
 
     # Chat model — market research + listing generation.
     llm_model: str = "gpt-4o-mini"
@@ -51,7 +59,12 @@ class Settings(BaseSettings):
     comps_provider: str = "serpapi"
     comps_enabled: bool = True
     comps_max_results: int = 8
-    serpapi_api_key: str = ""
+    # Accepts either SERPAPI_API_KEY (pydantic-settings' default derivation from the
+    # field name) or SERPAPI_KEY (the name this key happens to be exported under in
+    # some environments).
+    serpapi_api_key: str = Field(
+        default="", validation_alias=AliasChoices("SERPAPI_API_KEY", "SERPAPI_KEY")
+    )
 
     # Local cache for provider responses (sold comps, identity lookups).
     cache_enabled: bool = True
@@ -63,6 +76,16 @@ class Settings(BaseSettings):
     # Pricing defaults: haggle room above FMV and firm-bottom floor below it.
     default_haggle_pct: float = 0.15
     default_floor_pct: float = 0.10
+
+    # Marketplace auto-fill (local-only; spawns chrome-devtools-mcp against the
+    # user's own already-running Chrome). See app/services/posting/.
+    posting_enabled: bool = True
+    chrome_mcp_command: str = "npx"
+    chrome_mcp_channel: str = "beta"
+    chrome_mcp_extra_args: str = ""
+    # Falls back to llm_model when blank; a non-tool-calling chat model won't work here.
+    posting_model: str = ""
+    posting_max_steps: int = 40
 
     @property
     def cors_origins_list(self) -> list[str]:
