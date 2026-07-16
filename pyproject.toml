@@ -13,6 +13,7 @@ dependencies = [
     "httpx>=0.27",
     "python-multipart>=0.0.12",
     "tavily-python>=0.5",
+    "mcp>=1.0",
 ]
 
 [dependency-groups]
