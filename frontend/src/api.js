@@ -1,7 +1,11 @@
 // API client for the market-research backend.
-// All calls target relative `/api/...` paths, proxied to the FastAPI
-// backend (default `http://localhost:8000`) by Vite's dev server (see
-// vite.config.js) and by the production reverse proxy/deploy setup.
+// Calls target `${API_BASE}/api/...` paths. When VITE_BACKEND_URL is unset,
+// API_BASE is '' and paths stay relative, proxied to the FastAPI backend
+// (default `http://localhost:8000`) by Vite's dev server (see vite.config.js)
+// and by tests. In production (e.g. the Cloudflare Pages build) VITE_BACKEND_URL
+// is set to the deployed backend origin (e.g. the Cloud Run URL) so the bundle
+// calls the backend directly.
+const API_BASE = import.meta.env.VITE_BACKEND_URL ?? ''
 
 /**
  * Format FastAPI / generic error bodies for display.
@@ -111,7 +115,7 @@ function researchSummary(research) {
  * @returns {Promise<unknown>}
  */
 export async function checkHealth() {
-  const response = await fetch('/healthz')
+  const response = await fetch(`${API_BASE}/healthz`)
   return parseJsonOrThrow(response)
 }
 
@@ -151,7 +155,7 @@ export async function identifyItem({ description, images = [], context }) {
     formData.append('images', image)
   }
 
-  const response = await fetch('/api/identify', {
+  const response = await fetch(`${API_BASE}/api/identify`, {
     method: 'POST',
     body: formData,
   })
@@ -170,7 +174,7 @@ export async function identifyItem({ description, images = [], context }) {
  * }>}
  */
 export async function requestResearch({ item }) {
-  const response = await fetch('/api/research', {
+  const response = await fetch(`${API_BASE}/api/research`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(itemToRequestFields(item)),
@@ -188,7 +192,7 @@ export async function requestResearch({ item }) {
  * }>}
  */
 export async function generateListing({ item, research }) {
-  const response = await fetch('/api/listing', {
+  const response = await fetch(`${API_BASE}/api/listing`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
