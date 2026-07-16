@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { generateListing } from '../api.js'
+import { logger } from '../logger.js'
+import StatusLog, { itemDisplayName, useStatusLog } from './StatusLog.jsx'
 
 function ListingCard({ marketplace, listing }) {
   const [copied, setCopied] = useState(false)
@@ -41,19 +43,33 @@ export default function ListingStep({ item, research, onBack, onStartOver }) {
   const [listing, setListing] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState(null)
+  const { lines: statusLines, start: startStatus, finish: finishStatus, fail: failStatus, reset: resetStatus } =
+    useStatusLog()
 
   const runGenerate = useCallback(async () => {
     setIsLoading(true)
     setError(null)
+    setListing(null)
+    resetStatus()
+    const label = itemDisplayName(item)
+    startStatus([
+      `Drafting Facebook Marketplace listing for ${label}`,
+      `Drafting OfferUp listing for ${label}`,
+      'Polishing titles and descriptions',
+    ])
     try {
       const result = await generateListing({ item, research })
+      finishStatus('complete')
+      logger.info('listing response ready')
       setListing(result)
     } catch (err) {
+      failStatus('failed')
+      logger.error('listing failed', err)
       setError(err.message ?? 'Failed to generate listing content.')
     } finally {
       setIsLoading(false)
     }
-  }, [item, research])
+  }, [item, research, finishStatus, failStatus, resetStatus, startStatus])
 
   useEffect(() => {
     runGenerate()
@@ -70,9 +86,7 @@ export default function ListingStep({ item, research, onBack, onStartOver }) {
         </p>
       </div>
 
-      {isLoading && (
-        <p className="text-sm text-gray-500 dark:text-gray-400">Generating listing content...</p>
-      )}
+      {(isLoading || statusLines.length > 0) && <StatusLog lines={statusLines} />}
 
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">

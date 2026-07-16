@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { requestResearch } from '../api.js'
+import { logger } from '../logger.js'
+import StatusLog, { itemDisplayName, useStatusLog } from './StatusLog.jsx'
 
 function formatPriceRange(priceRange) {
   if (priceRange === null || priceRange === undefined) return 'Unknown'
@@ -21,19 +23,36 @@ export default function ResearchStep({ item, onApprove, onBack }) {
   const [report, setReport] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState(null)
+  const { lines: statusLines, start: startStatus, finish: finishStatus, fail: failStatus, reset: resetStatus } =
+    useStatusLog()
 
   const runResearch = useCallback(async () => {
     setIsLoading(true)
     setError(null)
+    setReport(null)
+    resetStatus()
+    const label = itemDisplayName(item)
+    startStatus([
+      `Item identified: ${label}`,
+      `Searching comparable listings for ${label}`,
+      `Analyzing prices for ${label}`,
+      `Writing research report`,
+    ])
     try {
       const result = await requestResearch({ item })
+      finishStatus('complete')
+      logger.info('research response', {
+        sources: result.sources?.length ?? 0,
+      })
       setReport(result)
     } catch (err) {
+      failStatus('failed')
+      logger.error('research failed', err)
       setError(err.message ?? 'Failed to generate the market research report.')
     } finally {
       setIsLoading(false)
     }
-  }, [item])
+  }, [item, finishStatus, failStatus, resetStatus, startStatus])
 
   useEffect(() => {
     runResearch()
@@ -51,9 +70,7 @@ export default function ResearchStep({ item, onApprove, onBack }) {
         </p>
       </div>
 
-      {isLoading && (
-        <p className="text-sm text-gray-500 dark:text-gray-400">Researching comparable listings...</p>
-      )}
+      {(isLoading || statusLines.length > 0) && <StatusLog lines={statusLines} />}
 
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">

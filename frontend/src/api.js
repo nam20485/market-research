@@ -1,3 +1,5 @@
+import { logger } from './logger.js'
+
 // API client for the market-research backend.
 // Calls target `${API_BASE}/api/...` paths.
 //
@@ -48,7 +50,9 @@ async function parseJsonOrThrow(response) {
     } catch {
       // response had no JSON body; fall back to statusText
     }
-    throw new Error(`Request failed (${response.status}): ${detail}`)
+    const message = `Request failed (${response.status}): ${detail}`
+    logger.error(message)
+    throw new Error(message)
   }
   return response.json()
 }
@@ -117,6 +121,7 @@ function researchSummary(research) {
  * @returns {Promise<unknown>}
  */
 export async function checkHealth() {
+  logger.info('GET', `${API_BASE}/healthz`)
   const response = await fetch(`${API_BASE}/healthz`)
   return parseJsonOrThrow(response)
 }
@@ -157,6 +162,10 @@ export async function identifyItem({ description, images = [], context }) {
     formData.append('images', image)
   }
 
+  logger.info('POST', `${API_BASE}/api/identify`, {
+    descriptionLen: (description ?? '').length,
+    imageCount: images.length,
+  })
   const response = await fetch(`${API_BASE}/api/identify`, {
     method: 'POST',
     body: formData,
@@ -176,10 +185,15 @@ export async function identifyItem({ description, images = [], context }) {
  * }>}
  */
 export async function requestResearch({ item }) {
+  const body = itemToRequestFields(item)
+  logger.info('POST', `${API_BASE}/api/research`, {
+    item_name: body.item_name,
+    brand: body.brand,
+  })
   const response = await fetch(`${API_BASE}/api/research`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(itemToRequestFields(item)),
+    body: JSON.stringify(body),
   })
   return parseJsonOrThrow(response)
 }
@@ -194,14 +208,19 @@ export async function requestResearch({ item }) {
  * }>}
  */
 export async function generateListing({ item, research }) {
+  const body = {
+    ...itemToRequestFields(item),
+    research_approved: true,
+    research_summary: researchSummary(research),
+  }
+  logger.info('POST', `${API_BASE}/api/listing`, {
+    item_name: body.item_name,
+    brand: body.brand,
+  })
   const response = await fetch(`${API_BASE}/api/listing`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      ...itemToRequestFields(item),
-      research_approved: true,
-      research_summary: researchSummary(research),
-    }),
+    body: JSON.stringify(body),
   })
   return parseJsonOrThrow(response)
 }

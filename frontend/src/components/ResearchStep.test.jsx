@@ -32,13 +32,13 @@ describe('ResearchStep', () => {
       <ResearchStep item={item} onApprove={onApprove} onBack={onBack} />,
     )
 
-    expect(
-      screen.getByText(/researching comparable listings/i),
-    ).toBeInTheDocument()
+    expect(screen.getByRole('status')).toBeInTheDocument()
+    expect(screen.getByText(/item identified: acme widget/i)).toBeInTheDocument()
 
     await waitFor(() => {
       expect(screen.getByText('$10-$20')).toBeInTheDocument()
     })
+    expect(screen.getByText(/complete/i)).toBeInTheDocument()
     expect(screen.getByText('High')).toBeInTheDocument()
     expect(screen.getByText('Sell the durability')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Comp A' })).toHaveAttribute(

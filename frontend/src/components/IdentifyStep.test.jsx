@@ -12,11 +12,13 @@ import { identifyItem } from '../api.js'
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
+  window.localStorage.clear()
 })
 
 beforeEach(() => {
   URL.createObjectURL = vi.fn(() => 'blob:preview')
   URL.revokeObjectURL = vi.fn()
+  window.localStorage.clear()
 })
 
 describe('IdentifyStep', () => {
@@ -132,5 +134,84 @@ describe('IdentifyStep', () => {
     expect(screen.getByAltText('keep.png')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /remove keep.png/i }))
     expect(screen.queryByAltText('keep.png')).not.toBeInTheDocument()
+  })
+
+  it('records a successful text query in recent searches', async () => {
+    const user = userEvent.setup()
+    identifyItem.mockResolvedValue({ candidates: [], locked: false })
+    render(<IdentifyStep onLocked={vi.fn()} />)
+
+    expect(screen.queryByText(/recent searches/i)).not.toBeInTheDocument()
+
+    await user.type(
+      screen.getByLabelText(/describe the item/i),
+      'black office chair',
+    )
+    await user.click(screen.getByRole('button', { name: /identify item/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/recent searches/i)).toBeInTheDocument()
+    })
+    expect(
+      screen.getByRole('button', { name: 'black office chair' }),
+    ).toBeInTheDocument()
+  })
+
+  it('does not record an image-only submission in recent searches', async () => {
+    const user = userEvent.setup()
+    identifyItem.mockResolvedValue({ candidates: [], locked: false })
+    render(<IdentifyStep onLocked={vi.fn()} />)
+
+    const file = new File(['abc'], 'photo.png', { type: 'image/png' })
+    await user.upload(screen.getByLabelText(/photos/i), file)
+    await user.click(screen.getByRole('button', { name: /identify item/i }))
+
+    await waitFor(() => {
+      expect(identifyItem).toHaveBeenCalled()
+    })
+    expect(screen.queryByText(/recent searches/i)).not.toBeInTheDocument()
+  })
+
+  it('clicking a recent search fills the textbox without submitting', async () => {
+    const user = userEvent.setup()
+    identifyItem.mockResolvedValue({ candidates: [], locked: false })
+    render(<IdentifyStep onLocked={vi.fn()} />)
+
+    await user.type(
+      screen.getByLabelText(/describe the item/i),
+      'vintage lamp',
+    )
+    await user.click(screen.getByRole('button', { name: /identify item/i }))
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: 'vintage lamp' }),
+      ).toBeInTheDocument()
+    })
+    expect(identifyItem).toHaveBeenCalledTimes(1)
+
+    await user.click(screen.getByRole('button', { name: 'vintage lamp' }))
+
+    expect(screen.getByLabelText(/describe the item/i)).toHaveValue(
+      'vintage lamp',
+    )
+    expect(identifyItem).toHaveBeenCalledTimes(1)
+  })
+
+  it('clears recent searches when Clear is clicked', async () => {
+    const user = userEvent.setup()
+    identifyItem.mockResolvedValue({ candidates: [], locked: false })
+    render(<IdentifyStep onLocked={vi.fn()} />)
+
+    await user.type(screen.getByLabelText(/describe the item/i), 'desk fan')
+    await user.click(screen.getByRole('button', { name: /identify item/i }))
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: 'desk fan' }),
+      ).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: /clear/i }))
+
+    expect(screen.queryByText(/recent searches/i)).not.toBeInTheDocument()
   })
 })

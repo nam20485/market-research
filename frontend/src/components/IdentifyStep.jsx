@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { identifyItem } from '../api.js'
+import { logger } from '../logger.js'
+import useRecentQueries from '../useRecentQueries.js'
+import StatusLog, { useStatusLog } from './StatusLog.jsx'
 
 function ImagePreviewList({ images }) {
   if (images.length === 0) return null
@@ -13,6 +16,38 @@ function ImagePreviewList({ images }) {
           className="h-20 w-20 rounded-md border border-gray-200 object-cover dark:border-gray-700"
         />
       ))}
+    </div>
+  )
+}
+
+function RecentQueries({ queries, onSelect, onClear }) {
+  if (queries.length === 0) return null
+  return (
+    <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
+      <div className="mb-2 flex items-center justify-between">
+        <p className="text-sm font-medium text-gray-700 dark:text-gray-200">
+          Recent searches
+        </p>
+        <button
+          type="button"
+          onClick={onClear}
+          className="text-xs text-gray-500 hover:underline dark:text-gray-400"
+        >
+          Clear
+        </button>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {queries.map((query) => (
+          <button
+            key={query}
+            type="button"
+            onClick={() => onSelect(query)}
+            className="rounded-full border border-gray-200 px-3 py-1 text-sm text-gray-700 transition-colors hover:border-indigo-300 hover:text-indigo-600 dark:border-gray-700 dark:text-gray-300 dark:hover:border-indigo-500 dark:hover:text-indigo-400"
+          >
+            {query}
+          </button>
+        ))}
+      </div>
     </div>
   )
 }
@@ -68,6 +103,9 @@ export default function IdentifyStep({ onLocked }) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState(null)
   const fileInputRef = useRef(null)
+  const { lines: statusLines, start: startStatus, finish: finishStatus, fail: failStatus, reset: resetStatus } =
+    useStatusLog()
+  const { recentQueries, addQuery, clearQueries } = useRecentQueries()
 
   useEffect(() => {
     return () => {
@@ -102,6 +140,15 @@ export default function IdentifyStep({ onLocked }) {
 
     setIsSubmitting(true)
     setError(null)
+    resetStatus()
+
+    const subject = description.trim() || 'photos'
+    const stages = [
+      pendingImages.length > 0 ? `Uploading ${pendingImages.length} photo(s)` : null,
+      `Identifying ${subject}`,
+      'Matching candidates',
+    ].filter(Boolean)
+    startStatus(stages)
 
     const userTurn = {
       role: 'user',
@@ -118,6 +165,9 @@ export default function IdentifyStep({ onLocked }) {
 
       const candidates = response.candidates ?? []
       const locked = Boolean(response.locked)
+      finishStatus(locked ? 'identified' : 'done')
+      logger.info('identify response', { candidates: candidates.length, locked })
+      addQuery(description)
 
       setTurns((current) => [
         ...current,
@@ -132,10 +182,16 @@ export default function IdentifyStep({ onLocked }) {
       setPendingImages([])
       if (fileInputRef.current) fileInputRef.current.value = ''
     } catch (err) {
+      failStatus('failed')
+      logger.error('identify failed', err)
       setError(err.message ?? 'Failed to reach the identification service.')
     } finally {
       setIsSubmitting(false)
     }
+  }
+
+  function handleSelectRecentQuery(query) {
+    setDescription(query)
   }
 
   function handleConfirmLock() {
@@ -228,6 +284,12 @@ export default function IdentifyStep({ onLocked }) {
         </div>
       )}
 
+      <RecentQueries
+        queries={recentQueries}
+        onSelect={handleSelectRecentQuery}
+        onClear={clearQueries}
+      />
+
       <form
         onSubmit={handleSubmit}
         className="flex flex-col gap-3 rounded-lg border border-gray-200 p-4 dark:border-gray-700"
@@ -274,13 +336,17 @@ export default function IdentifyStep({ onLocked }) {
 
         {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
+        {(isSubmitting || statusLines.length > 0) && (
+          <StatusLog lines={statusLines} />
+        )}
+
         <button
           type="submit"
           disabled={isSubmitting}
           className="mt-1 self-start rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:bg-gray-300 dark:bg-indigo-500 dark:hover:bg-indigo-400 dark:disabled:bg-gray-700"
         >
           {isSubmitting
-            ? 'Submitting...'
+            ? 'Working...'
             : hasCandidates
               ? 'Resubmit with more details'
               : 'Identify item'}

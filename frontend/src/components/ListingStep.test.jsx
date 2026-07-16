@@ -47,11 +47,15 @@ describe('ListingStep', () => {
       />,
     )
 
-    expect(screen.getByText(/generating listing content/i)).toBeInTheDocument()
+    expect(screen.getByRole('status')).toBeInTheDocument()
+    expect(
+      screen.getByText(/drafting facebook marketplace listing for widget/i),
+    ).toBeInTheDocument()
 
     await waitFor(() => {
       expect(screen.getByText('FB Title')).toBeInTheDocument()
     })
+    expect(screen.getByText(/complete/i)).toBeInTheDocument()
     expect(screen.getByText('OU Title')).toBeInTheDocument()
 
     const copyButtons = screen.getAllByRole('button', {
