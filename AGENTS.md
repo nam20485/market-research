@@ -127,3 +127,21 @@ Git history uses imperative, descriptive commit messages (e.g., "Add initial imp
 - OpenAI-compatible providers use the `openai/<model>` LiteLLM prefix with `LLM_API_BASE` / `LLM_API_KEY` (and optional `VISION_*`; blank vision base/key inherit from LLM). Z.AI coding plan (`zai/`) is text-only — point vision at a separate provider.
 - Frontend has no router, no component library, and no global state library (React 19 + `useState`/props only); Tailwind is loaded via a CDN script in `index.html`, not a build step. Client-side persisted state (theme, recent search queries) uses small custom hooks that read/write `localStorage` directly and guard against missing/corrupt JSON — follow the `useTheme.js` pattern (e.g. `useRecentQueries.js`) for new persisted UI state.
 - Backend structured logging lives in `app/logging_config.py` (`LOG_LEVEL` env, default `INFO`); API routes and services log start/duration/success-fail. The frontend mirrors this with a `StatusLog` component showing progressive step updates and `[market-research]`-prefixed browser console logs, so long-running requests don't look hung.
+- `serpapi_api_key` (`app/config.py`) accepts either the `SERPAPI_API_KEY` env var (the
+  default derived from the field name) or `SERPAPI_KEY` (an alias), via
+  `pydantic.Field(validation_alias=AliasChoices(...))`. `Settings.model_config` sets
+  `populate_by_name=True` so tests/code can still construct `Settings(serpapi_api_key=...)`
+  directly by field name in addition to either env var alias.
+- Facebook Marketplace auto-fill (`app/services/posting/`, `app/api/posting.py`,
+  `frontend/src/components/PostToMarketplaceDialog.jsx`) is **local-only**: it spawns
+  `chrome-devtools-mcp` over stdio (`npx chrome-devtools-mcp@latest --autoConnect --channel
+  beta`) and connects to the user's own already-running Chrome (144+, remote debugging
+  enabled once at `chrome://inspect/#remote-debugging`). It does not work against a
+  Cloud Run deployment. Everything (connect + LiteLLM tool-calling fill loop + teardown)
+  happens inside one `/api/post/fill` request/task — no persistent cross-request MCP
+  session — and the agent is instructed to stop before Publish/Post so the user submits
+  manually. Gated by `POSTING_ENABLED` (`posting_enabled` in `Settings`); the frontend
+  hides the "Post to Facebook Marketplace" button when `GET /api/post/capabilities`
+  reports `enabled: false`. `PostToMarketplaceDialog.jsx` prefills its price field from
+  `research.pricing.listing_price` (falling back to `price_range.low`/`.high`, then blank)
+  — do not read a raw/undefined price field there.
