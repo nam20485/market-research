@@ -44,3 +44,31 @@ services:
       - backend
     profiles:
       - prod
+
+  proxy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    environment:
+      FRONTEND_UPSTREAM: frontend:5173
+      BACKEND_UPSTREAM: backend:8000
+    depends_on:
+      - frontend
+      - backend
+
+  proxy-prod:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    environment:
+      FRONTEND_UPSTREAM: frontend-prod:80
+      BACKEND_UPSTREAM: backend:8000
+    depends_on:
+      - frontend-prod
+      - backend
+    profiles:
+      - prod

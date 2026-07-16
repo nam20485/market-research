@@ -78,6 +78,22 @@ docker compose --profile prod up --build backend frontend-prod
 Stop everything with `docker compose down` (add `--profile prod` if you started
 `frontend-prod`).
 
+#### Single-origin proxy (`http://localhost`)
+
+A Caddy reverse proxy (root `Caddyfile`) gives the browser **one same-origin entry
+point** at `http://localhost` (port 80): `/api/*` and `/healthz` route to the `backend`,
+everything else to the frontend. This mirrors a real edge deploy and avoids CORS in the
+browser path (WebSocket/Vite HMR upgrades are proxied automatically).
+
+```bash
+docker compose up                                 # dev: http://localhost → Vite + HMR
+docker compose --profile prod up proxy-prod       # prod-like: http://localhost → static nginx bundle
+```
+
+The direct `:8000` (backend), `:5173` (Vite), and `:8080` (nginx) ports stay published for
+debugging. The two proxy services never run together — `proxy-prod` is behind the `prod`
+profile — so there's no `:80` conflict.
+
 ## Backend Structure
 
 - `app/main.py` — FastAPI app factory, CORS, `/healthz`, router registration
