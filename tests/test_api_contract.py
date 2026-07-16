@@ -17,7 +17,13 @@ from app.schemas.identify import (
     IdentifyResponse,
 )
 from app.schemas.listing import ListingRequest, ListingResponse, MarketplaceListing
-from app.schemas.research import PriceRange, ResearchRequest, ResearchResponse, SourceLink
+from app.schemas.research import (
+    PriceRange,
+    PricingStrategy,
+    ResearchRequest,
+    ResearchResponse,
+    SourceLink,
+)
 
 client = TestClient(app)
 
@@ -35,6 +41,16 @@ FRONTEND_LISTING_BODY = {
     "research_approved": True,
     "research_summary": "Price: $400-$600. Demand: High. Angle: Ergonomic classic",
 }
+
+FAKE_PRICING = PricingStrategy(
+    fmv=450.0,
+    listing_price=517.5,
+    firm_bottom=405.0,
+    haggle_pct=0.15,
+    floor_pct=0.10,
+    condition_multiplier=1.0,
+    confidence="sold_comps",
+)
 
 
 def test_openapi_documents_all_public_routes() -> None:
@@ -57,6 +73,7 @@ def test_openapi_registers_core_model_schemas() -> None:
         "ResearchRequest",
         "ResearchResponse",
         "PriceRange",
+        "PricingStrategy",
         "SourceLink",
         "ListingRequest",
         "ListingResponse",
@@ -98,16 +115,44 @@ def test_research_models_round_trip() -> None:
     request = ResearchRequest.model_validate(FRONTEND_RESEARCH_BODY)
     assert request.item_name == "Herman Miller Aeron"
     assert request.attributes["size"] == "B"
+    assert request.haggle_pct is None
+    assert request.floor_pct is None
 
     response = ResearchResponse(
         price_range=PriceRange(low=400, high=600, currency="USD", summary="$400-$600"),
         demand="High",
         marketing_angle="Ergonomic classic",
         sources=[SourceLink(title="Comp", url="https://example.com/a")],
+        pricing=FAKE_PRICING,
     )
     reloaded = ResearchResponse.model_validate(response.model_dump())
     assert reloaded.price_range.low == 400
     assert reloaded.sources[0].url == "https://example.com/a"
+    assert reloaded.pricing.listing_price == 517.5
+    assert reloaded.pricing.confidence == "sold_comps"
+
+
+def test_research_request_accepts_explicit_haggle_and_floor_overrides() -> None:
+    request = ResearchRequest.model_validate(
+        {**FRONTEND_RESEARCH_BODY, "haggle_pct": 0.2, "floor_pct": 0.05}
+    )
+    assert request.haggle_pct == 0.2
+    assert request.floor_pct == 0.05
+
+
+def test_pricing_strategy_rejects_invalid_confidence() -> None:
+    with pytest.raises(ValidationError):
+        PricingStrategy.model_validate(
+            {
+                "fmv": 10.0,
+                "listing_price": 11.0,
+                "firm_bottom": 9.0,
+                "haggle_pct": 0.1,
+                "floor_pct": 0.1,
+                "condition_multiplier": 1.0,
+                "confidence": "maybe",
+            }
+        )
 
 
 def test_listing_models_round_trip() -> None:
@@ -142,6 +187,7 @@ def test_frontend_research_payload_is_accepted_by_endpoint() -> None:
             demand="High",
             marketing_angle="Ergonomic classic",
             sources=[SourceLink(title="Comp", url="https://example.com/a")],
+            pricing=FAKE_PRICING,
         )
     )
     app.dependency_overrides[get_research_service] = lambda: fake_service
@@ -155,6 +201,8 @@ def test_frontend_research_payload_is_accepted_by_endpoint() -> None:
     ResearchResponse.model_validate(body)
     assert body["price_range"]["currency"] == "USD"
     assert body["sources"][0]["title"] == "Comp"
+    assert body["pricing"]["confidence"] == "sold_comps"
+    assert body["pricing"]["listing_price"] == 517.5
 
 
 def test_frontend_listing_payload_is_accepted_by_endpoint() -> None:

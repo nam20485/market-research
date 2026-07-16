@@ -6,6 +6,8 @@ from fastapi import APIRouter, Depends
 
 from app.logging_config import get_logger
 from app.schemas.research import ResearchRequest, ResearchResponse
+from app.services.cache import CacheBackend, get_cache_backend
+from app.services.comps import CompsProvider, get_comps_provider
 from app.services.llm import LLMService, get_llm_service
 from app.services.research import ResearchService
 from app.services.search import SearchProvider, get_search_provider
@@ -17,8 +19,10 @@ logger = get_logger(__name__)
 def get_research_service(
     llm: LLMService = Depends(get_llm_service),
     search_provider: SearchProvider = Depends(get_search_provider),
+    comps_provider: CompsProvider = Depends(get_comps_provider),
+    cache: CacheBackend = Depends(get_cache_backend),
 ) -> ResearchService:
-    return ResearchService(llm, search_provider)
+    return ResearchService(llm, search_provider, comps_provider, cache)
 
 
 @router.post("/research", response_model=ResearchResponse)
