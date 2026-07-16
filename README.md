@@ -5,8 +5,12 @@ A UI app that conducts used market price and sales research and creates sale lis
 ## Features
 
 - **Item identification** — Gather item details and photos, search for matches, and refine until the specific item is identified.
-- **Market research** — Generate reports on used prices, demand, and optimal marketing angles.
+- **Market research** — Generate reports on used prices (backed by eBay sold comps plus a
+  computed listing/firm-bottom pricing strategy), demand, and optimal marketing angles.
 - **Listing content** — Produce marketplace-ready titles and descriptions when you approve the research.
+- **Facebook Marketplace auto-fill** (local-only) — From the listing step, have an agent
+  fill in the Facebook Marketplace create-listing form in your own running Chrome, so you
+  only need to review and click Publish. See [Marketplace auto-fill](#marketplace-auto-fill-local-only-facebook-marketplace) below.
 
 ## Tech Stack
 
@@ -98,12 +102,13 @@ profile — so there's no `:80` conflict.
 
 - `app/main.py` — FastAPI app factory, CORS, `/healthz`, router registration
 - `app/config.py` — pydantic-settings `Settings` read from `.env`
-- `app/api/` — routers: `identify.py`, `research.py`, `listing.py`
+- `app/api/` — routers: `identify.py`, `research.py`, `listing.py`, `posting.py`
 - `app/services/` — `llm.py` (LiteLLM chat/vision), `search.py` (Tavily-backed search
-  provider), `identification.py`, `research.py`, `listing.py`
+  provider), `comps.py` / `cache.py` / `pricing.py`, `identification.py`, `research.py`,
+  `listing.py`, and `posting/` (local Chrome MCP auto-fill)
 - `app/schemas/` — pydantic request/response models per vertical
 - `app/prompts/` — prompt templates per vertical
-- `tests/` — pytest, with LLM/search calls mocked (no real network calls)
+- `tests/` — pytest, with LLM/search/comps/MCP calls mocked (no real network calls)
 
 ## Frontend Structure
 
@@ -242,9 +247,45 @@ a separate vision provider).
 - `GET /healthz`
 - `POST /api/identify` — multipart form (`description`, `known_attributes` JSON string,
   `conversation` JSON string, optional `images` files) → candidates + `locked` flag
-- `POST /api/research` — locked item JSON → `price_range` / `demand` / `marketing_angle` / `sources`
+- `POST /api/research` — locked item JSON (optionally `haggle_pct` / `floor_pct`
+  overrides) → `price_range` / `demand` / `marketing_angle` / `sources` / `pricing`
+  (`fmv`, `listing_price`, `firm_bottom`, `confidence`, ...)
 - `POST /api/listing` — item + approved research JSON → per-marketplace title/description
   (Facebook Marketplace, OfferUp); returns `400` if `research_approved` is not `true`
+- `GET /api/post/capabilities` — `{enabled, marketplaces: [{id, label}]}`; drives whether
+  the frontend shows the "Post to Facebook Marketplace" button (local-only feature, see
+  below)
+- `POST /api/post/fill` — multipart form (`marketplace`, `title`, `description`, optional
+  `price`, optional `images` files) → `{status, steps_summary, screenshot?}`; connects to
+  your local Chrome, fills the marketplace's create-listing form, and stops before
+  Publish/Post. Returns `400` if posting is disabled or the marketplace is unknown, `502`
+  if the browser session or fill loop fails.
+
+## Marketplace auto-fill (local-only: Facebook Marketplace)
+
+The "Post to Facebook Marketplace" button (shown on the Listing step once research is
+approved) drives a browser-automation agent that fills in Facebook's create-listing form
+in your own already-running Chrome — title, description, and photos from the flow, plus
+an optional price prefilled from the research report's computed `pricing.listing_price`
+(falling back to the raw price range, or left blank). The agent never clicks
+Publish/Post; you review and submit manually.
+
+This is **local-only** — it does not work against a Cloud Run deployment, since the
+backend must be able to spawn a local process and reach your own Chrome:
+
+1. Run the backend locally (`uv run` or Compose), not against a hosted URL.
+2. Requires Node 24+ (`npx`) and Chrome 144+ on the beta channel, both on the same
+   machine as the backend.
+3. One-time setup: open `chrome://inspect/#remote-debugging` in Chrome and enable remote
+   debugging.
+4. Click the button, confirm the readiness dialog, and approve Chrome's connection
+   prompt if it appears. The backend spawns `chrome-devtools-mcp` and drives a LiteLLM
+   tool-calling agent to fill the form, then tears the connection down when the request
+   completes — there's no persistent background session.
+
+Set `POSTING_ENABLED=false` to hide the feature entirely (e.g. on a shared/Cloud Run
+deployment); see `.env.example` for the full `POSTING_*` / `CHROME_MCP_*` knobs.
+`SERPAPI_API_KEY` and `SERPAPI_KEY` are both accepted for the sold-comps key.
 
 ## Quality Checks
 

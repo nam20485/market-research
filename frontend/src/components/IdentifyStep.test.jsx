@@ -75,7 +75,36 @@ describe('IdentifyStep', () => {
     expect(onLocked).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'Aeron' }),
       expect.any(Object),
+      [],
     )
+  })
+
+  it('passes accumulated photo files up through onLocked', async () => {
+    const user = userEvent.setup()
+    const onLocked = vi.fn()
+    identifyItem.mockResolvedValue({
+      candidates: [{ name: 'Lamp', confidence: 0.9 }],
+      locked: true,
+    })
+
+    render(<IdentifyStep onLocked={onLocked} />)
+
+    const file = new File(['abc'], 'lamp.jpg', { type: 'image/jpeg' })
+    await user.upload(screen.getByLabelText(/photos/i), file)
+    await user.click(screen.getByRole('button', { name: /identify item/i }))
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Lamp').length).toBeGreaterThan(0)
+    })
+    await user.click(screen.getAllByRole('button', { name: /Lamp/i }).at(-1))
+    await user.click(
+      screen.getByRole('button', { name: /confirm & continue to research/i }),
+    )
+
+    expect(onLocked).toHaveBeenCalledTimes(1)
+    const photos = onLocked.mock.calls[0][2]
+    expect(photos).toHaveLength(1)
+    expect(photos[0]).toBe(file)
   })
 
   it('shows manual lock messaging when not locked and handles API errors', async () => {

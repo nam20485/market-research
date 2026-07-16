@@ -19,6 +19,7 @@ locals {
     "OPENAI_API_KEY",
     "TAVILY_API_KEY",
     "ZAI_API_KEY",
+    "SERPAPI_API_KEY",
   ]
   cloud_run_service_name  = "market-research-backend"
   artifact_repository_id  = "market-research"

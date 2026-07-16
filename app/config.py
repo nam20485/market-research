@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -26,7 +27,14 @@ class Settings(BaseSettings):
     Field names mirror the keys documented in `.env.example`.
     """
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+        # Lets tests/callers construct Settings(serpapi_api_key=...) directly, in
+        # addition to the SERPAPI_API_KEY/SERPAPI_KEY env var aliases below.
+        populate_by_name=True,
+    )
 
     # Chat model — market research + listing generation.
     llm_model: str = "gpt-4o-mini"
@@ -46,6 +54,48 @@ class Settings(BaseSettings):
     search_provider: str = "tavily"
     tavily_api_key: str = ""
     cors_origins: str = "http://localhost:5173"
+
+    # eBay sold-comps lookup (used for FMV pricing research).
+    comps_provider: str = "serpapi"
+    comps_enabled: bool = True
+    comps_max_results: int = 8
+    # Accepts either SERPAPI_API_KEY (pydantic-settings' default derivation from the
+    # field name) or SERPAPI_KEY (the name this key happens to be exported under in
+    # some environments).
+    serpapi_api_key: str = Field(
+        default="", validation_alias=AliasChoices("SERPAPI_API_KEY", "SERPAPI_KEY")
+    )
+
+    # Local cache for provider responses (sold comps, identity lookups).
+    cache_enabled: bool = True
+    cache_backend: str = "sqlite"
+    cache_db_path: str = ".cache/market_research.sqlite3"
+    cache_ttl_comps_seconds: int = 604800
+    cache_ttl_identity_seconds: int = 2592000
+
+    # Pricing defaults: haggle room above FMV and firm-bottom floor below it.
+    default_haggle_pct: float = 0.15
+    default_floor_pct: float = 0.10
+
+    # Marketplace auto-fill (local-only; spawns an MCP server — either
+    # chrome-devtools-mcp against the user's Chrome or appium-mcp against an
+    # Android emulator — to fill a listing form). See app/services/posting/.
+    posting_enabled: bool = True
+    chrome_mcp_command: str = "npx"
+    chrome_mcp_channel: str = "beta"
+    chrome_mcp_extra_args: str = ""
+    # Appium MCP backend for mobile-native marketplaces (e.g. OfferUp).
+    # Requires Node/npx, Android SDK + emulator, JDK 8+. The emulator must be
+    # running with the target app installed and logged in.
+    appium_mcp_command: str = "npx"
+    appium_mcp_extra_args: str = ""
+    # blank → inherit ANDROID_HOME from the process environment
+    appium_android_home: str = ""
+    # blank → auto-select first available emulator device
+    appium_emulator_name: str = ""
+    # Falls back to llm_model when blank; a non-tool-calling chat model won't work here.
+    posting_model: str = ""
+    posting_max_steps: int = 40
 
     @property
     def cors_origins_list(self) -> list[str]:

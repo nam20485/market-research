@@ -88,13 +88,26 @@ function itemToRequestFields(item) {
 
 /**
  * Build a short research summary string for listing generation.
+ *
+ * Prefers the computed `pricing.listing_price` (Phase 3 dynamic pricing)
+ * over the raw `price_range` when both are present, since it reflects the
+ * haggle-adjusted price the seller should actually list at.
+ *
  * @param {Record<string, unknown> | null | undefined} research
  * @returns {string | null}
  */
 function researchSummary(research) {
   if (!research || typeof research !== 'object') return null
   const parts = []
-  if (research.price_range) {
+  const pricing = research.pricing
+  if (
+    pricing &&
+    typeof pricing === 'object' &&
+    typeof pricing.listing_price === 'number'
+  ) {
+    const currency = typeof pricing.currency === 'string' ? pricing.currency : 'USD'
+    parts.push(`Price: ${currency} ${pricing.listing_price}`)
+  } else if (research.price_range) {
     const range = research.price_range
     if (typeof range === 'string') {
       parts.push(`Price: ${range}`)
@@ -176,16 +189,37 @@ export async function identifyItem({ description, images = [], context }) {
 /**
  * Request a market research report for a locked item.
  *
- * @param {{ item: Record<string, unknown> }} params
+ * @param {{
+ *   item: Record<string, unknown>,
+ *   haggle_pct?: number | null,
+ *   floor_pct?: number | null,
+ * }} params
  * @returns {Promise<{
  *   price_range: unknown,
  *   demand: unknown,
  *   marketing_angle: string,
  *   sources: { title: string, url: string }[],
+ *   pricing: {
+ *     fmv: number,
+ *     listing_price: number,
+ *     firm_bottom: number,
+ *     currency: string,
+ *     haggle_pct: number,
+ *     floor_pct: number,
+ *     condition_multiplier: number,
+ *     confidence: 'sold_comps' | 'asking_price' | 'unknown',
+ *     rationale: string | null,
+ *   } | null | undefined,
  * }>}
  */
-export async function requestResearch({ item }) {
+export async function requestResearch({ item, haggle_pct, floor_pct }) {
   const body = itemToRequestFields(item)
+  if (haggle_pct !== undefined && haggle_pct !== null) {
+    body.haggle_pct = haggle_pct
+  }
+  if (floor_pct !== undefined && floor_pct !== null) {
+    body.floor_pct = floor_pct
+  }
   logger.info('POST', `${API_BASE}/api/research`, {
     item_name: body.item_name,
     brand: body.brand,
@@ -221,6 +255,50 @@ export async function generateListing({ item, research }) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+  })
+  return parseJsonOrThrow(response)
+}
+
+/**
+ * Check whether the backend can auto-fill marketplace listings (local-only
+ * feature; disabled e.g. when pointed at Cloud Run).
+ * @returns {Promise<{ enabled: boolean, marketplaces: { id: string, label: string }[] }>}
+ */
+export async function getPostingCapabilities() {
+  logger.info('GET', `${API_BASE}/api/post/capabilities`)
+  const response = await fetch(`${API_BASE}/api/post/capabilities`)
+  return parseJsonOrThrow(response)
+}
+
+/**
+ * Auto-fill a marketplace's create-listing form via the backend's local
+ * browser-automation agent. Connect + fill + teardown happen server-side in
+ * a single request; the agent stops before Publish/Post for the user to submit.
+ *
+ * @param {{
+ *   marketplace: string,
+ *   listing: { title?: string, description?: string },
+ *   price?: number | string | null,
+ *   images?: File[],
+ * }} params
+ * @returns {Promise<{ status: string, steps_summary: string[], screenshot?: string | null }>}
+ */
+export async function fillMarketplaceListing({ marketplace, listing, price, images = [] }) {
+  const formData = new FormData()
+  formData.append('marketplace', marketplace)
+  formData.append('title', listing?.title ?? '')
+  formData.append('description', listing?.description ?? '')
+  if (price !== undefined && price !== null && price !== '') {
+    formData.append('price', String(price))
+  }
+  for (const image of images) {
+    formData.append('images', image)
+  }
+
+  logger.info('POST', `${API_BASE}/api/post/fill`, { marketplace, imageCount: images.length })
+  const response = await fetch(`${API_BASE}/api/post/fill`, {
+    method: 'POST',
+    body: formData,
   })
   return parseJsonOrThrow(response)
 }

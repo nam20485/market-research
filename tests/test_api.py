@@ -8,10 +8,20 @@ from app.api.research import get_research_service
 from app.main import app
 from app.schemas.identify import IdentifyResponse
 from app.schemas.listing import ListingResponse, MarketplaceListing
-from app.schemas.research import PriceRange, ResearchResponse
+from app.schemas.research import PriceRange, PricingStrategy, ResearchResponse
 from app.services.listing import ResearchNotApprovedError
 
 client = TestClient(app)
+
+_FAKE_PRICING = PricingStrategy(
+    fmv=15.0,
+    listing_price=17.25,
+    firm_bottom=13.5,
+    haggle_pct=0.15,
+    floor_pct=0.10,
+    condition_multiplier=1.0,
+    confidence="asking_price",
+)
 
 
 def test_healthz() -> None:
@@ -52,6 +62,7 @@ def test_research_endpoint_returns_service_response() -> None:
             demand="Moderate",
             marketing_angle="Highlight durability",
             sources=[],
+            pricing=_FAKE_PRICING,
         )
     )
     app.dependency_overrides[get_research_service] = lambda: fake_service
@@ -87,6 +98,7 @@ def test_research_accepts_identify_candidate_fields() -> None:
             demand="High",
             marketing_angle="Angle",
             sources=[],
+            pricing=_FAKE_PRICING,
         )
     )
     app.dependency_overrides[get_research_service] = lambda: fake_service

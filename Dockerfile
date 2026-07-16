@@ -33,6 +33,12 @@ RUN useradd --create-home --uid 1000 appuser
 WORKDIR /app
 COPY --from=builder --chown=appuser:appuser /app /app
 
+# `WORKDIR /app` creates /app as root, and `COPY --chown` above only re-owns
+# the copied contents — not the pre-existing /app directory node. Without this,
+# the non-root runtime user (appuser) cannot create runtime files under /app
+# (e.g. the SQLite cache dir /app/.cache), causing EACCES at request time.
+RUN chown appuser:appuser /app
+
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1
 

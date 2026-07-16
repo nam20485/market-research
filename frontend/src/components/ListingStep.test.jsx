@@ -1,13 +1,15 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ListingStep from './ListingStep.jsx'
 
 vi.mock('../api.js', () => ({
   generateListing: vi.fn(),
+  getPostingCapabilities: vi.fn(),
+  fillMarketplaceListing: vi.fn(),
 }))
 
-import { generateListing } from '../api.js'
+import { fillMarketplaceListing, generateListing, getPostingCapabilities } from '../api.js'
 
 function stubClipboard(writeText) {
   vi.stubGlobal('navigator', {
@@ -15,6 +17,10 @@ function stubClipboard(writeText) {
     clipboard: { writeText },
   })
 }
+
+beforeEach(() => {
+  getPostingCapabilities.mockResolvedValue({ enabled: false, marketplaces: [] })
+})
 
 afterEach(() => {
   cleanup()
@@ -129,5 +135,146 @@ describe('ListingStep', () => {
       ).toBeInTheDocument()
     })
     await user.click(screen.getByRole('button', { name: /retry/i }))
+  })
+
+  it('hides the post-to-Facebook button when posting capabilities are disabled', async () => {
+    generateListing.mockResolvedValue({
+      facebook_marketplace: { title: 'FB', description: 'D' },
+      offerup: { title: 'OU', description: 'D2' },
+    })
+
+    render(
+      <ListingStep item={item} research={research} onBack={vi.fn()} onStartOver={vi.fn()} />,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('FB')).toBeInTheDocument()
+    })
+    expect(
+      screen.queryByRole('button', { name: /post to facebook marketplace/i }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('hides the post-to-Facebook button when the FB marketplace is not in capabilities', async () => {
+    getPostingCapabilities.mockResolvedValue({
+      enabled: true,
+      marketplaces: [{ id: 'offerup', label: 'OfferUp' }],
+    })
+    generateListing.mockResolvedValue({
+      facebook_marketplace: { title: 'FB', description: 'D' },
+      offerup: { title: 'OU', description: 'D2' },
+    })
+
+    render(
+      <ListingStep item={item} research={research} onBack={vi.fn()} onStartOver={vi.fn()} />,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('FB')).toBeInTheDocument()
+    })
+    expect(
+      screen.queryByRole('button', { name: /post to facebook marketplace/i }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('shows the post-to-Facebook button, opens the dialog, and closes it', async () => {
+    const user = userEvent.setup()
+    getPostingCapabilities.mockResolvedValue({
+      enabled: true,
+      marketplaces: [{ id: 'facebook_marketplace', label: 'Facebook Marketplace' }],
+    })
+    generateListing.mockResolvedValue({
+      facebook_marketplace: { title: 'FB', description: 'D' },
+      offerup: { title: 'OU', description: 'D2' },
+    })
+
+    render(
+      <ListingStep
+        item={item}
+        research={{ ...research, pricing: { listing_price: 63.25 } }}
+        photos={[{ name: 'photo.jpg' }]}
+        onBack={vi.fn()}
+        onStartOver={vi.fn()}
+      />,
+    )
+
+    const postButton = await screen.findByRole('button', {
+      name: /post to facebook marketplace/i,
+    })
+    await user.click(postButton)
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByLabelText(/price/i)).toHaveValue(63.25)
+
+    await user.click(screen.getByRole('button', { name: /cancel/i }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(fillMarketplaceListing).not.toHaveBeenCalled()
+  })
+
+  it('hides the post-to-OfferUp button when posting capabilities are disabled', async () => {
+    generateListing.mockResolvedValue({
+      facebook_marketplace: { title: 'FB', description: 'D' },
+      offerup: { title: 'OU', description: 'D2' },
+    })
+
+    render(
+      <ListingStep item={item} research={research} onBack={vi.fn()} onStartOver={vi.fn()} />,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('OU')).toBeInTheDocument()
+    })
+    expect(screen.queryByRole('button', { name: /post to offerup/i })).not.toBeInTheDocument()
+  })
+
+  it('shows the post-to-OfferUp button, opens the dialog, and closes it', async () => {
+    const user = userEvent.setup()
+    getPostingCapabilities.mockResolvedValue({
+      enabled: true,
+      marketplaces: [{ id: 'offerup', label: 'OfferUp' }],
+    })
+    generateListing.mockResolvedValue({
+      facebook_marketplace: { title: 'FB', description: 'D' },
+      offerup: { title: 'OU', description: 'D2' },
+    })
+
+    render(
+      <ListingStep
+        item={item}
+        research={{ ...research, pricing: { listing_price: 50 } }}
+        photos={[{ name: 'photo.jpg' }]}
+        onBack={vi.fn()}
+        onStartOver={vi.fn()}
+      />,
+    )
+
+    const postButton = await screen.findByRole('button', { name: /post to offerup/i })
+    await user.click(postButton)
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByText(/android emulator/i)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /cancel/i }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(fillMarketplaceListing).not.toHaveBeenCalled()
+  })
+
+  it('does not fail when capabilities fetch rejects', async () => {
+    getPostingCapabilities.mockRejectedValue(new Error('offline'))
+    generateListing.mockResolvedValue({
+      facebook_marketplace: { title: 'FB', description: 'D' },
+      offerup: { title: 'OU', description: 'D2' },
+    })
+
+    render(
+      <ListingStep item={item} research={research} onBack={vi.fn()} onStartOver={vi.fn()} />,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('FB')).toBeInTheDocument()
+    })
+    expect(
+      screen.queryByRole('button', { name: /post to facebook marketplace/i }),
+    ).not.toBeInTheDocument()
   })
 })

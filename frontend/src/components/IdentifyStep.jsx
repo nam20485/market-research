@@ -197,7 +197,10 @@ export default function IdentifyStep({ onLocked }) {
   function handleConfirmLock() {
     if (selectedCandidateIndex === null) return
     const item = latestCandidates[selectedCandidateIndex]
-    onLocked(item, context)
+    const photos = turns
+      .filter((turn) => turn.role === 'user')
+      .flatMap((turn) => turn.images.map((image) => image.file))
+    onLocked(item, context, photos)
   }
 
   const hasCandidates = latestCandidates.length > 0

@@ -39,6 +39,27 @@ async def test_identify_locks_on_high_confidence_candidate() -> None:
     search.search.assert_not_awaited()
 
 
+async def test_identify_locks_on_high_confidence_even_if_llm_says_unlocked() -> None:
+    """Regression test: confidence >= LOCK_CONFIDENCE_THRESHOLD must force locked=True
+    even when the LLM's own `locked` field says False."""
+    payload = {
+        "candidates": [
+            {"name": "iPhone 13", "brand": "Apple", "model": "A2482", "confidence": 0.95}
+        ],
+        "locked": False,
+        "follow_up_question": None,
+    }
+    service, llm, search = _service(json.dumps(payload))
+
+    request = IdentifyRequest(description="It's a blue iPhone")
+    response = await service.identify(request, image_data_urls=["data:image/jpeg;base64,abc"])
+
+    assert response.locked is True
+    assert response.locked_item is not None
+    assert response.locked_item.name == "iPhone 13"
+    search.search.assert_not_awaited()
+
+
 async def test_identify_uses_search_when_not_locked() -> None:
     payload = {
         "candidates": [{"name": "Running shoes", "brand": "Brand X", "confidence": 0.4}],

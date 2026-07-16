@@ -12,6 +12,9 @@ node_modules/
 htmlcov/
 coverage.json
 
+# Local SQLite cache (sold comps + identity lookups)
+.cache/
+
 # Frontend (built separately by the frontend worker)
 frontend/node_modules/
 frontend/dist/
