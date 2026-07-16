@@ -239,3 +239,39 @@ Please review the recommendations below and provide feedback on implementation s
 **Feedback Required:**
 - [ ] Is the team comfortable maintaining the deterministic Playwright selectors for FB/OfferUp?
 - [ ] Do we need to wrap the MCP server in a specific Python SDK to pass its tools to LiteLLM dynamically?
+
+> **Dev feedback — §5**
+>
+> **This entire phase is greenfield.** There is no Playwright, no CDP, no MCP, and no
+> posting endpoint in the repo. The listing stage stops at generating copy-paste text:
+> `ListingResponse` returns `facebook_marketplace` + `offerup` title/description only
+> (`app/schemas/listing.py`, `app/services/listing.py`). The stray `Caddyfile` in the
+> tree is unrelated to posting. So this is a new subsystem, and it changes the app's
+> risk profile significantly (it's currently read-only research; posting is a
+> write/side-effecting automation).
+>
+> - **Architecture caution:** posting to FB Marketplace/OfferUp via a real logged-in
+>   Chrome session is a **local, stateful, browser-bound** operation. That does **not**
+>   fit the current Cloud Run backend (headless, scale-to-zero, no user browser). Expect
+>   a separate **local/desktop runner** (or the Proxmox box) that holds the Chrome
+>   session — the Cloud Run API can produce the `PricingStrategy` + listing payload, but
+>   the automation itself should live client-side/local. Please confirm this
+>   split-deployment assumption before we design it. Also flag the ToS/anti-bot risk as
+>   a product decision, not just an engineering one.
+> - **Deterministic Playwright + MCP-fallback is the right instinct**, and it mirrors
+>   how the codebase already treats providers (deterministic default, pluggable
+>   fallback). Maintaining selectors for two sites is real ongoing toil (their DOMs
+>   change without notice) — budget for it and keep selectors in one versioned module
+>   so a break is a one-file fix. Start with FB Marketplace only; add OfferUp second.
+> - **"Wrap the MCP server to pass tools to LiteLLM" — here's the mismatch again:**
+>   nothing in the app currently gives the model a tool schema; every call is
+>   single-shot JSON synthesis. Exposing Chrome DevTools MCP tools to the LLM means
+>   introducing our **first real tool-calling loop** (LiteLLM `tools=` + an execution
+>   loop that dispatches tool calls and feeds results back). That's a meaningful new
+>   capability in `LLMService`, not a config tweak. Given the anti-bot stakes, I'd
+>   scope the MCP fallback as a **phase 2** — ship deterministic Playwright first,
+>   observe real breakage rates, then decide whether an LLM-driven self-heal loop earns
+>   its complexity. If we do it, yes, we'd wrap the MCP tools as LiteLLM tool
+>   definitions and add a bounded tool-call loop (with a hard iteration cap and
+>   human-confirm before the final submit, per the repo's "confirm before external side
+>   effects" posture).
