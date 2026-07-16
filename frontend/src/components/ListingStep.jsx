@@ -44,6 +44,7 @@ function ListingCard({ marketplace, listing, headerExtra }) {
 }
 
 const FACEBOOK_MARKETPLACE_ID = 'facebook_marketplace'
+const OFFERUP_ID = 'offerup'
 
 export default function ListingStep({ item, research, photos = [], onBack, onStartOver }) {
   const [listing, setListing] = useState(null)
@@ -51,6 +52,7 @@ export default function ListingStep({ item, research, photos = [], onBack, onSta
   const [error, setError] = useState(null)
   const [capabilities, setCapabilities] = useState(null)
   const [showPostDialog, setShowPostDialog] = useState(false)
+  const [showOfferupDialog, setShowOfferupDialog] = useState(false)
   const { lines: statusLines, start: startStatus, finish: finishStatus, fail: failStatus, reset: resetStatus } =
     useStatusLog()
 
@@ -103,6 +105,11 @@ export default function ListingStep({ item, research, photos = [], onBack, onSta
     Boolean(capabilities?.marketplaces?.some((m) => m.id === FACEBOOK_MARKETPLACE_ID)) &&
     Boolean(listing?.facebook_marketplace)
 
+  const canPostToOfferup =
+    Boolean(capabilities?.enabled) &&
+    Boolean(capabilities?.marketplaces?.some((m) => m.id === OFFERUP_ID)) &&
+    Boolean(listing?.offerup)
+
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
       <div>
@@ -150,7 +157,21 @@ export default function ListingStep({ item, research, photos = [], onBack, onSta
               />
             )}
             {listing.offerup && (
-              <ListingCard marketplace="OfferUp" listing={listing.offerup} />
+              <ListingCard
+                marketplace="OfferUp"
+                listing={listing.offerup}
+                headerExtra={
+                  canPostToOfferup && (
+                    <button
+                      type="button"
+                      onClick={() => setShowOfferupDialog(true)}
+                      className="rounded-md border border-indigo-300 px-3 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-50 dark:border-indigo-700 dark:text-indigo-300 dark:hover:bg-indigo-950"
+                    >
+                      Post to OfferUp
+                    </button>
+                  )
+                }
+              />
             )}
           </div>
 
@@ -180,6 +201,16 @@ export default function ListingStep({ item, research, photos = [], onBack, onSta
           research={research}
           photos={photos}
           onClose={() => setShowPostDialog(false)}
+        />
+      )}
+
+      {showOfferupDialog && listing?.offerup && (
+        <PostToMarketplaceDialog
+          marketplace={OFFERUP_ID}
+          listing={listing.offerup}
+          research={research}
+          photos={photos}
+          onClose={() => setShowOfferupDialog(false)}
         />
       )}
     </div>

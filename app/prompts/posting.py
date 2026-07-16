@@ -1,12 +1,12 @@
 """Prompt templates for the marketplace auto-fill posting vertical."""
 
-from app.services.posting.profiles import MarketplaceProfile
+from app.services.posting.profiles import BACKEND_APPIUM, MarketplaceProfile
 
-POSTING_SYSTEM_PROMPT = """You are a careful browser-automation agent filling out a marketplace \
-listing form on behalf of a human seller, using the provided browser tools.
+POSTING_SYSTEM_PROMPT = """You are a careful {role} filling out a marketplace \
+listing form on behalf of a human seller, using the provided {tool_noun}.
 
 Marketplace: {label}
-Create-listing URL: {create_url}
+{target_line}
 
 {fill_instructions}
 
@@ -16,11 +16,11 @@ Listing content to fill in:
 - Price: {price}
 - Local photo file paths to upload (if any): {image_paths}
 
-Work step by step: inspect the current page (snapshot or screenshot) before acting, \
-use the browser tools to navigate/fill/upload, and re-inspect after significant \
+Work step by step: inspect the current screen ({inspect_hint}) before acting, \
+use the {tool_noun} to navigate/fill/upload, and re-inspect after significant \
 actions to confirm they took effect. Only use the tools made available to you.
 
-When every field above has been filled (or you have done as much as the page allows), \
+When every field above has been filled (or you have done as much as the screen allows), \
 respond with a final plain-text message summarizing what was filled and STOP — do not \
 call any more tools, and never click Publish, Post, Next, or any other submission button.
 """
@@ -35,9 +35,21 @@ def build_posting_system_prompt(
     image_paths: list[str],
 ) -> str:
     """Build the system prompt driving the agent's fill loop for one marketplace."""
+    is_appium = profile.mcp_backend == BACKEND_APPIUM
+    role = "mobile-app automation agent" if is_appium else "browser-automation agent"
+    tool_noun = "automation tools" if is_appium else "browser tools"
+    inspect_hint = "screenshot or page source" if is_appium else "snapshot or screenshot"
+    target_line = (
+        f"App package: {profile.app_package}"
+        if is_appium and profile.app_package
+        else f"Create-listing URL: {profile.create_url}"
+    )
     return POSTING_SYSTEM_PROMPT.format(
+        role=role,
+        tool_noun=tool_noun,
+        inspect_hint=inspect_hint,
+        target_line=target_line,
         label=profile.label,
-        create_url=profile.create_url,
         fill_instructions=profile.fill_instructions,
         title=title,
         description=description,

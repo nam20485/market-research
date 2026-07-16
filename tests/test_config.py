@@ -96,6 +96,10 @@ def test_settings_posting_defaults() -> None:
     assert settings.chrome_mcp_command == "npx"
     assert settings.chrome_mcp_channel == "beta"
     assert settings.chrome_mcp_extra_args == ""
+    assert settings.appium_mcp_command == "npx"
+    assert settings.appium_mcp_extra_args == ""
+    assert settings.appium_android_home == ""
+    assert settings.appium_emulator_name == ""
     assert settings.posting_model == ""
     assert settings.posting_max_steps == 40
 
@@ -105,6 +109,10 @@ def test_settings_reads_posting_env(clean_env: pytest.MonkeyPatch) -> None:
     clean_env.setenv("CHROME_MCP_COMMAND", "node")
     clean_env.setenv("CHROME_MCP_CHANNEL", "stable")
     clean_env.setenv("CHROME_MCP_EXTRA_ARGS", "--headless")
+    clean_env.setenv("APPIUM_MCP_COMMAND", "node")
+    clean_env.setenv("APPIUM_MCP_EXTRA_ARGS", "--verbose")
+    clean_env.setenv("APPIUM_ANDROID_HOME", "/opt/android-sdk")
+    clean_env.setenv("APPIUM_EMULATOR_NAME", "Pixel_5")
     clean_env.setenv("POSTING_MODEL", "gpt-4o")
     clean_env.setenv("POSTING_MAX_STEPS", "10")
 
@@ -114,6 +122,10 @@ def test_settings_reads_posting_env(clean_env: pytest.MonkeyPatch) -> None:
     assert settings.chrome_mcp_command == "node"
     assert settings.chrome_mcp_channel == "stable"
     assert settings.chrome_mcp_extra_args == "--headless"
+    assert settings.appium_mcp_command == "node"
+    assert settings.appium_mcp_extra_args == "--verbose"
+    assert settings.appium_android_home == "/opt/android-sdk"
+    assert settings.appium_emulator_name == "Pixel_5"
     assert settings.posting_model == "gpt-4o"
     assert settings.posting_max_steps == 10
 

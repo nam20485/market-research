@@ -132,16 +132,23 @@ Git history uses imperative, descriptive commit messages (e.g., "Add initial imp
   `pydantic.Field(validation_alias=AliasChoices(...))`. `Settings.model_config` sets
   `populate_by_name=True` so tests/code can still construct `Settings(serpapi_api_key=...)`
   directly by field name in addition to either env var alias.
-- Facebook Marketplace auto-fill (`app/services/posting/`, `app/api/posting.py`,
-  `frontend/src/components/PostToMarketplaceDialog.jsx`) is **local-only**: it spawns
-  `chrome-devtools-mcp` over stdio (`npx chrome-devtools-mcp@latest --autoConnect --channel
+- Marketplace auto-fill (`app/services/posting/`, `app/api/posting.py`,
+  `frontend/src/components/PostToMarketplaceDialog.jsx`) is **local-only** and
+  marketplace-agnostic: each `MarketplaceProfile` selects an MCP backend. Facebook Marketplace
+  uses `chrome-devtools-mcp` over stdio (`npx chrome-devtools-mcp@latest --autoConnect --channel
   beta`) and connects to the user's own already-running Chrome (144+, remote debugging
-  enabled once at `chrome://inspect/#remote-debugging`). It does not work against a
-  Cloud Run deployment. Everything (connect + LiteLLM tool-calling fill loop + teardown)
-  happens inside one `/api/post/fill` request/task — no persistent cross-request MCP
-  session — and the agent is instructed to stop before Publish/Post so the user submits
-  manually. Gated by `POSTING_ENABLED` (`posting_enabled` in `Settings`); the frontend
-  hides the "Post to Facebook Marketplace" button when `GET /api/post/capabilities`
-  reports `enabled: false`. `PostToMarketplaceDialog.jsx` prefills its price field from
-  `research.pricing.listing_price` (falling back to `price_range.low`/`.high`, then blank)
-  — do not read a raw/undefined price field there.
+  enabled once at `chrome://inspect/#remote-debugging`). OfferUp uses `appium-mcp` over stdio
+  (`npx appium-mcp@latest`) against an Android emulator (OfferUp app installed + logged in;
+  requires Android SDK, JDK 8+, `ANDROID_HOME`) because OfferUp has no web posting flow.
+  Neither works against a Cloud Run deployment. Everything (connect + LiteLLM tool-calling fill
+  loop + teardown) happens inside one `/api/post/fill` request/task — no persistent
+  cross-request MCP session — and the agent is instructed to stop before Publish/Post so the
+  user submits manually. `open_session(profile, settings)` in `session.py` dispatches between
+  `open_browser_session` (chrome-devtools) and `open_appium_session` (appium) based on
+  `profile.mcp_backend`. The agent's curated tool set is also per-backend
+  (`CHROME_CURATED_TOOLS` / `APPIUM_CURATED_TOOLS` in `agent.py`). Gated by `POSTING_ENABLED`
+  (`posting_enabled` in `Settings`); the frontend hides the post buttons when
+  `GET /api/post/capabilities` reports `enabled: false`. `PostToMarketplaceDialog.jsx`
+  prefills its price field from `research.pricing.listing_price` (falling back to
+  `price_range.low`/`.high`, then blank) and shows per-marketplace readiness instructions
+  (Chrome/emulator setup steps) — do not read a raw/undefined price field there.

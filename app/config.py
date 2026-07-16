@@ -77,12 +77,22 @@ class Settings(BaseSettings):
     default_haggle_pct: float = 0.15
     default_floor_pct: float = 0.10
 
-    # Marketplace auto-fill (local-only; spawns chrome-devtools-mcp against the
-    # user's own already-running Chrome). See app/services/posting/.
+    # Marketplace auto-fill (local-only; spawns an MCP server — either
+    # chrome-devtools-mcp against the user's Chrome or appium-mcp against an
+    # Android emulator — to fill a listing form). See app/services/posting/.
     posting_enabled: bool = True
     chrome_mcp_command: str = "npx"
     chrome_mcp_channel: str = "beta"
     chrome_mcp_extra_args: str = ""
+    # Appium MCP backend for mobile-native marketplaces (e.g. OfferUp).
+    # Requires Node/npx, Android SDK + emulator, JDK 8+. The emulator must be
+    # running with the target app installed and logged in.
+    appium_mcp_command: str = "npx"
+    appium_mcp_extra_args: str = ""
+    # blank → inherit ANDROID_HOME from the process environment
+    appium_android_home: str = ""
+    # blank → auto-select first available emulator device
+    appium_emulator_name: str = ""
     # Falls back to llm_model when blank; a non-tool-calling chat model won't work here.
     posting_model: str = ""
     posting_max_steps: int = 40
