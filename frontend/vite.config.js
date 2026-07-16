@@ -1,10 +1,12 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// Overridable so the Vite dev server can reach the backend by its Docker
-// Compose service name (`http://backend:8000`) instead of `localhost` when
-// both run in containers on the same network. Defaults to plain local dev.
-const backendTarget = process.env.VITE_BACKEND_URL || 'http://localhost:8000'
+// Server-only proxy target (NOT VITE_* — those are baked into client JS).
+// In Docker Compose this is `http://backend:8000` (compose service DNS);
+// locally it defaults to localhost. Do not confuse with VITE_BACKEND_URL,
+// which is the browser-facing absolute API origin used only for the
+// Cloudflare Pages production build.
+const backendTarget = process.env.BACKEND_PROXY_TARGET || 'http://localhost:8000'
 
 // https://vite.dev/config/
 export default defineConfig({

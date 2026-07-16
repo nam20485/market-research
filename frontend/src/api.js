@@ -1,10 +1,12 @@
 // API client for the market-research backend.
-// Calls target `${API_BASE}/api/...` paths. When VITE_BACKEND_URL is unset,
-// API_BASE is '' and paths stay relative, proxied to the FastAPI backend
-// (default `http://localhost:8000`) by Vite's dev server (see vite.config.js)
-// and by tests. In production (e.g. the Cloudflare Pages build) VITE_BACKEND_URL
-// is set to the deployed backend origin (e.g. the Cloud Run URL) so the bundle
-// calls the backend directly.
+// Calls target `${API_BASE}/api/...` paths.
+//
+// Local / Docker Compose: leave VITE_BACKEND_URL unset so API_BASE is '' and
+// paths stay relative. Vite (or nginx) then proxies /api and /healthz to the
+// backend — see BACKEND_PROXY_TARGET in vite.config.js / docker-compose.yml.
+//
+// Cloudflare Pages: set VITE_BACKEND_URL at build time to the public Cloud Run
+// origin so the static bundle calls the backend cross-origin.
 const API_BASE = import.meta.env.VITE_BACKEND_URL ?? ''
 
 /**
