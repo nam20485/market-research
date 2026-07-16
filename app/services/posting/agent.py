@@ -27,7 +27,7 @@ logger = get_logger(__name__)
 # Curated subset of chrome-devtools-mcp's tools: enough to navigate, inspect,
 # and fill a form, without exposing broader browser-control surface (e.g.
 # emulation, network interception) to the agent.
-CURATED_TOOLS = frozenset(
+CHROME_CURATED_TOOLS = frozenset(
     {
         "navigate_page",
         "new_page",
@@ -45,6 +45,32 @@ CURATED_TOOLS = frozenset(
     }
 )
 
+# Curated subset of appium-mcp's tools: enough to find elements, interact, and
+# inspect the screen, without exposing device-kill or uninstall capabilities.
+APPIUM_CURATED_TOOLS = frozenset(
+    {
+        "appium_session_management",
+        "appium_find_element",
+        "appium_gesture",
+        "appium_screenshot",
+        "appium_get_page_source",
+        "appium_app_lifecycle",
+        "appium_context",
+        "appium_mobile_device_control",
+        "appium_driver_settings",
+    }
+)
+
+# Alias kept for backward compatibility with existing tests/imports.
+CURATED_TOOLS = CHROME_CURATED_TOOLS
+
+
+def _curated_tools_for(backend: str) -> frozenset[str]:
+    """Return the curated tool set for the given MCP backend."""
+    if backend == "appium":
+        return APPIUM_CURATED_TOOLS
+    return CHROME_CURATED_TOOLS
+
 
 async def fill(
     session: ClientSession,
@@ -61,9 +87,14 @@ async def fill(
     all_tools = cast(
         "list[ChatCompletionToolParam]", await load_mcp_tools(session, format="openai")
     )
-    tools = [tool for tool in all_tools if tool["function"]["name"] in CURATED_TOOLS]
+    curated = _curated_tools_for(profile.mcp_backend)
+    tools = [tool for tool in all_tools if tool["function"]["name"] in curated]
     logger.info(
-        "posting: loaded %d/%d curated tools for %s", len(tools), len(all_tools), profile.id
+        "posting: loaded %d/%d curated tools for %s (backend=%s)",
+        len(tools),
+        len(all_tools),
+        profile.id,
+        profile.mcp_backend,
     )
 
     system_prompt = build_posting_system_prompt(

@@ -10,8 +10,8 @@ from app.config import Settings, get_settings
 from app.logging_config import get_logger
 from app.schemas.posting import FillResponse, MarketplaceInfo, PostingCapabilities
 from app.services.posting.agent import fill as run_fill
-from app.services.posting.profiles import get_profile, list_profiles
-from app.services.posting.session import open_browser_session
+from app.services.posting.profiles import BACKEND_APPIUM, get_profile, list_profiles
+from app.services.posting.session import open_session
 
 router = APIRouter(prefix="/post", tags=["posting"])
 logger = get_logger(__name__)
@@ -62,7 +62,7 @@ async def fill_marketplace_listing(
     with tempfile.TemporaryDirectory(prefix="market-research-posting-") as tmp_dir:
         image_paths = await _save_temp_images(images, Path(tmp_dir))
         try:
-            async with open_browser_session(settings) as session:
+            async with open_session(profile, settings) as session:
                 steps = await run_fill(
                     session,
                     profile,
@@ -78,17 +78,27 @@ async def fill_marketplace_listing(
             )
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=(
-                    "Failed to fill the marketplace listing. Make sure Chrome is running "
-                    "locally with remote debugging enabled (chrome://inspect/#remote-debugging) "
-                    "and try again."
-                ),
+                detail=_backend_error_message(profile.mcp_backend),
             ) from exc
 
     logger.info(
         "posting fill complete in %.2fs: steps=%d", time.perf_counter() - started, len(steps)
     )
     return FillResponse(status="filled", steps_summary=steps)
+
+
+def _backend_error_message(backend: str) -> str:
+    """Return a backend-specific troubleshooting hint for the 502 error."""
+    if backend == BACKEND_APPIUM:
+        return (
+            "Failed to fill the marketplace listing. Make sure an Android emulator is "
+            "running with the app installed and logged in, ANDROID_HOME is set, and try again."
+        )
+    return (
+        "Failed to fill the marketplace listing. Make sure Chrome is running "
+        "locally with remote debugging enabled (chrome://inspect/#remote-debugging) "
+        "and try again."
+    )
 
 
 async def _save_temp_images(images: list[UploadFile], tmp_dir: Path) -> list[str]:
